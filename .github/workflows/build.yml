@@ -2,15 +2,9 @@ name: Build
 
 on:
   push:
-    branches:
-      - master
-      - fl
-      - fl_entity
+    branches: [main]
   pull_request:
-    branches:
-      - master
-      - fl
-      - fl_entity
+    branches: [main]
 
 env:
   # Customize the build type here (Release, Debug, RelWithDebInfo, etc.)
@@ -21,10 +15,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
-
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{github.head_ref}}
+        fetch-depth: 0
+        repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
     - name: Build
       # Build JasmineGraph docker image
-      run: |
-        cd docker
-        docker build -t jasminegraph .
+      run: docker build -t jasminegraph .
