@@ -16,6 +16,8 @@ limitations under the License.
 #include <iostream>
 #include <map>
 #include <set>
+#include <thread>
+#include <spdlog/spdlog.h>
 #include "JasmineGraphFrontEnd.h"
 #include <nlohmann/json.hpp>
 #include "../util/Conts.h"
@@ -38,6 +40,7 @@ limitations under the License.
 #include "core/scheduler/JobScheduler.h"
 #include "../performance/metrics/PerformanceUtil.h"
 #include "core/CoreConstants.h"
+#include "../centralstore/incremental/RelationBlock.h"
 
 using json = nlohmann::json;
 using namespace std;
@@ -51,18 +54,58 @@ Logger frontend_logger;
 std::set<ProcessInfo> processData;
 std::mutex aggregateWeightMutex;
 std::mutex triangleTreeMutex;
+std::string stream_topic_name;
+// Thread function
+void listen_to_kafka_topic(KafkaConnector &kstream, Partitioner &graphPartitioner, vector<DataPublisher*> &workerClients)
+{
+    while (true) {
+        cppkafka::Message msg = kstream.consumer.poll();
+        if (!msg || msg.get_error()) {
+            continue;
+        }
+        string data(msg.get_payload());
+        if (data == "-1") {  // Marks the end of stream
+            frontend_logger.log("Received the end of `" +stream_topic_name+"` input kafka stream", "info");
+            break;
+        }
+        auto edgeJson = json::parse(data);
+        auto sourceJson = edgeJson["source"];
+        auto destinationJson = edgeJson["destination"];
+        std::string sId = std::string(sourceJson["id"]);
+        std::string dId = std::string(destinationJson["id"]);
+        partitionedEdge partitionedEdge = graphPartitioner.addEdge({sId, dId});
+        sourceJson["pid"] = partitionedEdge[0].second;
+        destinationJson["pid"] = partitionedEdge[1].second;
+        workerClients.at((int) partitionedEdge[0].second)->publish(sourceJson.dump());
+        workerClients.at((int) partitionedEdge[1].second)->publish(destinationJson.dump());
+
+    }
+
+    graphPartitioner.printStats();
+}
 
 void *frontendservicesesion(std::string masterIP, int connFd, SQLiteDBInterface sqlite,
                             PerformanceSQLiteDBInterface perfSqlite, JobScheduler jobScheduler) {
     frontend_logger.log("Thread No: " + to_string(pthread_self()), "info");
     frontend_logger.log("Master IP: " + masterIP, "info");
-    char data[FRONTEND_DATA_LENGTH];
+    char data[FRONTEND_DATA_LENGTH+1];
     bzero(data, FRONTEND_DATA_LENGTH + 1);
     Utils utils;
     vector<Utils::worker> workerList = utils.getWorkerList(sqlite);
     vector<DataPublisher*> workerClients;
+//  Initiate Kafka consumer
+    thread input_stream_handler;
+    std::string kafka_server_IP = utils.getJasmineGraphProperty("org.jasminegraph.server.streaming.kafka.host");
+    cppkafka::Configuration configs = {{"metadata.broker.list", kafka_server_IP},
+                                       {"group.id",             "knnect"}};
+    KafkaConnector kstream(configs);
+    std::string partitionCount = utils.getJasmineGraphProperty("org.jasminegraph.server.npartitions");
+    int numberOfPartitions = std::stoi(partitionCount);
+
+    Partitioner graphPartitioner(numberOfPartitions, 1, spt::Algorithms::HASH);
 
     for (int i = 0; i < workerList.size(); i++) {
+
         Utils::worker currentWorker = workerList.at(i);
         string workerHost = currentWorker.hostname;
         string workerID = currentWorker.workerID;
@@ -182,7 +225,7 @@ void *frontendservicesesion(std::string masterIP, int connFd, SQLiteDBInterface 
             }
 
             // We get the name and the path to graph as a pair separated by |.
-            char graph_data[FRONTEND_DATA_LENGTH];
+            char graph_data[FRONTEND_DATA_LENGTH+1];
             bzero(graph_data, FRONTEND_DATA_LENGTH + 1);
             string name = "";
             string path = "";
@@ -258,7 +301,7 @@ void *frontendservicesesion(std::string masterIP, int connFd, SQLiteDBInterface 
             }
 
             // We get the name and the path to graph as a pair separated by |.
-            char graph_data[FRONTEND_DATA_LENGTH];
+            char graph_data[FRONTEND_DATA_LENGTH+1];
             char partition_count[FRONTEND_DATA_LENGTH];
             bzero(graph_data, FRONTEND_DATA_LENGTH + 1);
             string name = "";
@@ -391,7 +434,7 @@ void *frontendservicesesion(std::string masterIP, int connFd, SQLiteDBInterface 
                 continue;
             }
 
-            char type[20];
+            char type[21];
             bzero(type, 21);
             read(connFd, type, 20);
             string graphType(type);
@@ -425,7 +468,7 @@ void *frontendservicesesion(std::string masterIP, int connFd, SQLiteDBInterface 
                 loop = true;
                 continue;
             }
-            char graph_data[FRONTEND_DATA_LENGTH];
+            char graph_data[FRONTEND_DATA_LENGTH+1];
             bzero(graph_data, FRONTEND_DATA_LENGTH + 1);
             string name = "";
             string edgeListPath = "";
@@ -513,44 +556,6 @@ void *frontendservicesesion(std::string masterIP, int connFd, SQLiteDBInterface 
                 continue;
             }
         } else if (line.compare(ADD_STREAM_KAFKA) == 0) {
-            bool TESTING = false; // Test graph data bypassing kafka stream
-            if (TESTING) {
-                std::string testData[] = {
-                        "{\"source\":{\"id\":\"0x97e58c7d37cba1a1e2ecbb2a5b23f8d127b6892d\",\"properties\":{"
-                        "\"blockNumber\":\"448028\",\"timestamp\":\"1445954881\",\"tokenId\":\"4422\"}},\"destination\":{"
-                        "\"id\":\"0xb1a2b43a7433dd150bb82227ed519cd6b142d382\"},\"properties\":{\"blockNumber\":\"448028\","
-                        "\"timestamp\":\"1445954881\",\"tokenId\":\"4422\",\"graphId\":\"1\"}}",
-                        "{\"source\":{\"id\":\"0x97e58c7d37cba1a1e2ecbb2a5b23f8d127b6892d\",\"properties\":{"
-                        "\"blockNumber\":\"447862\",\"timestamp\":\"1445951915\",\"tokenId\":\"1343\"}},\"destination\":{"
-                        "\"id\":\"0x9b22a80d5c7b3374a05b446081f97d0a34079e7f\"},\"properties\":{\"blockNumber\":\"447862\","
-                        "\"timestamp\":\"1445951915\",\"tokenId\":\"1343\",\"graphId\":\"1\"}}",
-                        "{\"source\":{\"id\":\"0x97e58c7d37cba1a1e2ecbb2a5b23f8d127b6892d\",\"properties\":{"
-                        "\"blockNumber\":\"447786\",\"timestamp\":\"1445950900\",\"tokenId\":\"10000\"}},\"destination\":{"
-                        "\"id\":\"0x9b22a80d5c7b3374a05b446081f97d0a34079e7f\"},\"properties\":{\"blockNumber\":\"447786\","
-                        "\"timestamp\":\"1445950900\",\"tokenId\":\"10000\",\"graphId\":\"1\"}}",
-                        "{\"source\":{\"id\":\"0xb1a2b43a7433dd150bb82227ed519cd6b142d382\",\"properties\":{"
-                        "\"blockNumber\":\"447767\",\"timestamp\":\"1445950646\",\"tokenId\":\"20000\"}},\"destination\":{"
-                        "\"id\":\"0x97e58c7d37cba1a1e2ecbb2a5b23f8d127b6892d\"},\"properties\":{\"blockNumber\":\"447767\","
-                        "\"timestamp\":\"1445950646\",\"tokenId\":\"20000\",\"graphId\":\"1\"}}"};
-                Partitioner graphPartitioner(1, 0, spt::Algorithms::HASH);
-
-                for (auto data : testData) {
-                    auto edgeJson = json::parse(data);
-                    auto sourceJson = edgeJson["source"];
-                    auto destinationJson = edgeJson["destination"];
-
-                    std::string sourceID = std::string(sourceJson["id"]);
-                    std::string destinationID = std::string(destinationJson["id"]);
-
-                    partitionedEdge partitionedEdge = graphPartitioner.addEdge({sourceID, destinationID});
-                    edgeJson["source"]["pid"] = std::to_string(partitionedEdge[0].second);
-                    edgeJson["destination"]["pid"] = std::to_string(partitionedEdge[1].second);
-                    workerClients.at((int)partitionedEdge[0].second)->publish(edgeJson.dump());
-                    workerClients.at((int)partitionedEdge[1].second)->publish(edgeJson.dump());
-                }
-                continue;
-            }
-
             frontend_logger.log("Start serving `" + ADD_STREAM_KAFKA + "` command", "info");
             string message = "send kafka topic name";
             int result_wr = write(connFd, message.c_str(), message.length());
@@ -567,23 +572,31 @@ void *frontendservicesesion(std::string masterIP, int connFd, SQLiteDBInterface 
                 continue;
             }
 
-            // We get the name and the path to graph as a pair separated by |.
-            char topic_name[FRONTEND_DATA_LENGTH];
+            // We get the name here.
+            char topic_name[FRONTEND_DATA_LENGTH+1];
             bzero(topic_name, FRONTEND_DATA_LENGTH + 1);
-
             read(connFd, topic_name, FRONTEND_DATA_LENGTH);
 
+            string con_message = "Received the kafka topic";
+            int con_result_wr = write(connFd, con_message.c_str(), con_message.length());
+            if (con_result_wr < 0) {
+                frontend_logger.log("Error writing to socket", "error");
+                loop = true;
+                continue;
+            }
+
+            Utils utils;
             string topic_name_s(topic_name);
             topic_name_s = utils.trim_copy(topic_name_s, " \f\n\r\t\v");
-
-            //std::thread streamingThread(KafkaConnector::startStream,topic_name_s, workerClients, streamsState);
-            //TODO(miyurud):Temporarily commenting this line to enable building the project. Asked tmkasun to provide a
-            // permanent fix later when he is available.
-            //streamsState->insert(topic_name_s, false);
+            stream_topic_name=topic_name_s;
+            kstream.Subscribe(topic_name_s);
+            frontend_logger.log("Start listening to " + topic_name_s, "info");
+            input_stream_handler = thread(listen_to_kafka_topic, std::ref(kstream),std::ref(graphPartitioner),std::ref(workerClients));
 
         } else if (line.compare(STOP_STREAM_KAFKA) == 0) {
             frontend_logger.log("Start serving `" + STOP_STREAM_KAFKA + "` command", "info");
-            string message = "send kafka topic name";
+            kstream.Unsubscribe();
+            string message = "Successfully stop `" + stream_topic_name + "` input kafka stream";
             int result_wr = write(connFd, message.c_str(), message.length());
             if (result_wr < 0) {
                 frontend_logger.log("Error writing to socket", "error");
@@ -597,20 +610,6 @@ void *frontendservicesesion(std::string masterIP, int connFd, SQLiteDBInterface 
                 loop = true;
                 continue;
             }
-
-            // Get the Kafka topic name
-            char topic_name[FRONTEND_DATA_LENGTH];
-            bzero(topic_name, FRONTEND_DATA_LENGTH + 1);
-
-            read(connFd, topic_name, FRONTEND_DATA_LENGTH);
-
-            string topic_name_s(topic_name);
-            topic_name_s = utils.trim_copy(topic_name_s, " \f\n\r\t\v");
-            /*if (streamsState->find(topic_name_s) != streamsState->end()) {
-                auto steamState = streamsState->find(topic_name_s);
-                steamState->second = true;
-            }*/
-
         } else if (line.compare(RMGR) == 0) {
             int result_wr = write(connFd, SEND.c_str(), FRONTEND_COMMAND_LENGTH);
             if (result_wr < 0) {
@@ -626,7 +625,7 @@ void *frontendservicesesion(std::string masterIP, int connFd, SQLiteDBInterface 
             }
 
             // We get the name and the path to graph as a pair separated by |.
-            char graph_id[FRONTEND_DATA_LENGTH];
+            char graph_id[FRONTEND_DATA_LENGTH+1];
             bzero(graph_id, FRONTEND_DATA_LENGTH + 1);
             string name = "";
             string path = "";
@@ -686,7 +685,7 @@ void *frontendservicesesion(std::string masterIP, int connFd, SQLiteDBInterface 
             }
 
             // We get the name and the path to graph as a pair separated by |.
-            char graph_data[FRONTEND_DATA_LENGTH];
+            char graph_data[FRONTEND_DATA_LENGTH+1];
             bzero(graph_data, FRONTEND_DATA_LENGTH + 1);
 
 
@@ -731,7 +730,7 @@ void *frontendservicesesion(std::string masterIP, int connFd, SQLiteDBInterface 
             }
 
             // We get the name and the path to graph as a pair separated by |.
-            char graph_id_data[300];
+            char graph_id_data[301];
             bzero(graph_id_data, 301);
             string name = "";
 
@@ -767,7 +766,7 @@ void *frontendservicesesion(std::string masterIP, int connFd, SQLiteDBInterface 
                 }
 
                 // We get the name and the path to graph as a pair separated by |.
-                char priority_data[300];
+                char priority_data[301];
                 bzero(priority_data, 301);
 
                 read(connFd, priority_data, FRONTEND_DATA_LENGTH);
@@ -869,7 +868,7 @@ void *frontendservicesesion(std::string masterIP, int connFd, SQLiteDBInterface 
                 frontend_logger.log("Error writing to socket", "error");
             }
 
-            char graph_id_data[300];
+            char graph_id_data[301];
             bzero(graph_id_data, 301);
             string name = "";
 
@@ -918,7 +917,7 @@ void *frontendservicesesion(std::string masterIP, int connFd, SQLiteDBInterface 
                 frontend_logger.log("Error writing to socket", "error");
             }
 
-            char graph_id_data[300];
+            char graph_id_data[301];
             bzero(graph_id_data, 301);
             string name = "";
 
@@ -980,7 +979,7 @@ void *frontendservicesesion(std::string masterIP, int connFd, SQLiteDBInterface 
                 frontend_logger.log("Error writing to socket", "error");
             }
 
-            char train_data[300];
+            char train_data[301];
             bzero(train_data, 301);
 
             read(connFd, train_data, 300);
@@ -1039,7 +1038,7 @@ void *frontendservicesesion(std::string masterIP, int connFd, SQLiteDBInterface 
                 continue;
             }
 
-            char graph_id[FRONTEND_DATA_LENGTH];
+            char graph_id[FRONTEND_DATA_LENGTH+1];
             bzero(graph_id, FRONTEND_DATA_LENGTH + 1);
 
             read(connFd, graph_id, FRONTEND_DATA_LENGTH);
@@ -1081,7 +1080,7 @@ void *frontendservicesesion(std::string masterIP, int connFd, SQLiteDBInterface 
                 continue;
             }
 
-            char graph_id[FRONTEND_DATA_LENGTH];
+            char graph_id[FRONTEND_DATA_LENGTH+1];
             bzero(graph_id, FRONTEND_DATA_LENGTH + 1);
 
             read(connFd, graph_id, FRONTEND_DATA_LENGTH);
@@ -1123,7 +1122,7 @@ void *frontendservicesesion(std::string masterIP, int connFd, SQLiteDBInterface 
                 continue;
             }
 
-            char page_rank_command[FRONTEND_DATA_LENGTH];
+            char page_rank_command[FRONTEND_DATA_LENGTH+1];
             bzero(page_rank_command, FRONTEND_DATA_LENGTH + 1);
             string name = "";
             string path = "";
@@ -1190,7 +1189,7 @@ void *frontendservicesesion(std::string masterIP, int connFd, SQLiteDBInterface 
                 continue;
             }
 
-            char graph_id[FRONTEND_DATA_LENGTH];
+            char graph_id[FRONTEND_DATA_LENGTH+1];
             bzero(graph_id, FRONTEND_DATA_LENGTH + 1);
 
             read(connFd, graph_id, FRONTEND_DATA_LENGTH);
@@ -1232,7 +1231,7 @@ void *frontendservicesesion(std::string masterIP, int connFd, SQLiteDBInterface 
                 continue;
             }
 
-            char graph_id[FRONTEND_DATA_LENGTH];
+            char graph_id[FRONTEND_DATA_LENGTH+1];
             bzero(graph_id, FRONTEND_DATA_LENGTH + 1);
 
             read(connFd, graph_id, FRONTEND_DATA_LENGTH);
@@ -1268,7 +1267,7 @@ void *frontendservicesesion(std::string masterIP, int connFd, SQLiteDBInterface 
                 frontend_logger.log("Error writing to socket", "error");
             }
 
-            char predict_data[300];
+            char predict_data[301];
             bzero(predict_data, 301);
             string graphID = "";
             string path = "";
@@ -1313,7 +1312,7 @@ void *frontendservicesesion(std::string masterIP, int connFd, SQLiteDBInterface 
                 frontend_logger.log("Error writing to socket", "error");
             }
 
-            char worker_data[300];
+            char worker_data[301];
             bzero(worker_data, 301);
 
             read(connFd, worker_data, 300);
@@ -1357,7 +1356,7 @@ void *frontendservicesesion(std::string masterIP, int connFd, SQLiteDBInterface 
                 frontend_logger.log("Error writing to socket", "error");
             }
 
-            char category[FRONTEND_DATA_LENGTH];
+            char category[FRONTEND_DATA_LENGTH+1];
             bzero(category, FRONTEND_DATA_LENGTH + 1);
 
             read(connFd, category, FRONTEND_DATA_LENGTH);
@@ -1439,6 +1438,7 @@ void *frontendservicesesion(std::string masterIP, int connFd, SQLiteDBInterface 
     }
     frontend_logger.log("Closing thread " + to_string(pthread_self()) + " and connection", "info");
     close(connFd);
+    return NULL;
 }
 
 JasmineGraphFrontEnd::JasmineGraphFrontEnd(SQLiteDBInterface db, PerformanceSQLiteDBInterface perfDb, std::string masterIP,
@@ -1767,7 +1767,7 @@ void JasmineGraphServer::pageRank(std::string graphID, double alpha, int iterati
         }
 
         int sockfd;
-        char data[300];
+        char data[301];
         bool loop = false;
         socklen_t len;
         struct sockaddr_in serv_addr;
@@ -1957,7 +1957,7 @@ void JasmineGraphServer::egoNet(std::string graphID) {
     workerList.pop_back();
 
     int sockfd;
-    char data[300];
+    char data[301];
     bool loop = false;
     socklen_t len;
     struct sockaddr_in serv_addr;
