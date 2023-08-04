@@ -14,21 +14,20 @@ limitations under the License.
 #ifndef JASMINEGRAPH_SCHEDULERSERVICE_H
 #define JASMINEGRAPH_SCHEDULERSERVICE_H
 
-#include "../../performance/metrics/PerformanceUtil.h"
-#include "../Utils.h"
-#include "../logger/Logger.h"
-#include "../../performancedb/PerformanceSQLiteDBInterface.h"
 #include <thread>
 
+#include "../../performance/metrics/PerformanceUtil.h"
+#include "../../performancedb/PerformanceSQLiteDBInterface.h"
+#include "../Utils.h"
+#include "../logger/Logger.h"
 
 class SchedulerService {
-public:
-    static void startScheduler();
-    static void startPerformanceScheduler();
+ public:
+  static void startScheduler();
+  static void startPerformanceScheduler();
 
-    static SQLiteDBInterface sqlite;
-    static PerformanceSQLiteDBInterface perfSqlite;
+  static SQLiteDBInterface sqlite;
+  static PerformanceSQLiteDBInterface perfSqlite;
 };
 
-
-#endif //JASMINEGRAPH_SCHEDULERSERVICE_H
+#endif  // JASMINEGRAPH_SCHEDULERSERVICE_H

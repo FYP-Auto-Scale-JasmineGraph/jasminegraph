@@ -21,44 +21,45 @@ limitations under the License.
 #define NODE_MANAGER
 
 struct GraphConfig {
-    unsigned long maxLabelSize;
-    unsigned int graphID = 0;
-    unsigned int partitionID = 0;
-    std::string openMode;
+  unsigned long maxLabelSize;
+  unsigned int graphID = 0;
+  unsigned int partitionID = 0;
+  std::string openMode;
 };
 
 class NodeManager {
-   private:
-    unsigned int nextNodeIndex = 0;
-    std::fstream* nodeDBT;
-    unsigned int graphID = 0;
-    unsigned int partitionID = 0;
-    static const std::string FILE_MODE;
-    unsigned long INDEX_KEY_SIZE = 5;  // Size of an index key entry in bytes
+ private:
+  unsigned int nextNodeIndex = 0;
+  std::fstream *nodeDBT;
+  unsigned int graphID = 0;
+  unsigned int partitionID = 0;
+  static const std::string FILE_MODE;
+  unsigned long INDEX_KEY_SIZE = 5;  // Size of an index key entry in bytes
 
-    int dbSize(std::string path);
-    void persistNodeIndex();
-    std::unordered_map<std::string, unsigned int> readNodeIndex();
-    static std::string NODE_DB_PATH;  // Node database file path
-                                      // TODO(tmkasun): This NODE_DB_PATH should be moved to NodeBlock header definition
+  int dbSize(std::string path);
+  void persistNodeIndex();
+  std::unordered_map<std::string, unsigned int> readNodeIndex();
+  static std::string NODE_DB_PATH;  // Node database file path
+  // TODO(tmkasun): This NODE_DB_PATH should be moved to NodeBlock header
+  // definition
 
-   public:
-    static unsigned int nextPropertyIndex;  // Next available property block index
-    // unless open in wipe data
-    // mode(trunc) need to set this value to property db seekp()/BLOCK_SIZE
-    std::string index_db_loc;
+ public:
+  static unsigned int nextPropertyIndex;  // Next available property block index
+  // unless open in wipe data
+  // mode(trunc) need to set this value to property db seekp()/BLOCK_SIZE
+  std::string index_db_loc;
 
-    std::unordered_map<std::string, unsigned int> nodeIndex;
+  std::unordered_map<std::string, unsigned int> nodeIndex;
 
-    NodeManager(GraphConfig);
-    ~NodeManager() { delete NodeBlock::nodesDB; };
-    void setIndexKeySize(unsigned long);
-    RelationBlock* addEdge(std::pair<std::string, std::string>);
-    RelationBlock* addRelation(NodeBlock, NodeBlock);
-    void close();
-    NodeBlock* addNode(std::string);  // will redurn DB block address
-    NodeBlock* get(std::string);
-    std::list<NodeBlock> getGraph(int limit = 10);
+  NodeManager(GraphConfig);
+  ~NodeManager() { delete NodeBlock::nodesDB; };
+  void setIndexKeySize(unsigned long);
+  RelationBlock *addEdge(std::pair<std::string, std::string>);
+  RelationBlock *addRelation(NodeBlock, NodeBlock);
+  void close();
+  NodeBlock *addNode(std::string);  // will redurn DB block address
+  NodeBlock *get(std::string);
+  std::list<NodeBlock> getGraph(int limit = 10);
 };
 
 #endif

@@ -12,15 +12,17 @@ limitations under the License.
  */
 
 #include "ExecutorFactory.h"
+
 #include "../executor/impl/TriangleCountExecutor.h"
 
-ExecutorFactory::ExecutorFactory(SQLiteDBInterface db, PerformanceSQLiteDBInterface perfDb) {
-    this->sqliteDB = db;
-    this->perfDB = perfDb;
+ExecutorFactory::ExecutorFactory(SQLiteDBInterface db,
+                                 PerformanceSQLiteDBInterface perfDb) {
+  this->sqliteDB = db;
+  this->perfDB = perfDb;
 }
 
-AbstractExecutor* ExecutorFactory::getExecutor(JobRequest jobRequest) {
-    if (TRIANGLES == jobRequest.getJobType()) {
-        return new TriangleCountExecutor(this->sqliteDB, this->perfDB, jobRequest);
-    }
+AbstractExecutor *ExecutorFactory::getExecutor(JobRequest jobRequest) {
+  if (TRIANGLES == jobRequest.getJobType()) {
+    return new TriangleCountExecutor(this->sqliteDB, this->perfDB, jobRequest);
+  }
 }

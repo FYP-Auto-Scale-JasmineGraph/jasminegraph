@@ -14,30 +14,29 @@ limitations under the License.
 #ifndef JASMINEGRAPH_JOBREQUEST_H
 #define JASMINEGRAPH_JOBREQUEST_H
 
-#include <string>
 #include <map>
+#include <string>
 
 class JobRequest {
-private:
-    std::string jobId;
-    std::string jobType;
-    std::string masterIP;
-    std::map<std::string, std::string> requestParams;
+ private:
+  std::string jobId;
+  std::string jobType;
+  std::string masterIP;
+  std::map<std::string, std::string> requestParams;
 
-public:
-    int priority;
+ public:
+  int priority;
 
-    std::string getJobId();
-    void setJobId(std::string inputJobId);
-    std::string getJobType();
-    void setJobType(std::string inputJobType);
-    void addParameter(std::string key, std::string value);
-    std::string getParameter(std::string key);
-    void setPriority(int priority);
-    int getPriority();
-    void setMasterIP(std::string masterip);
-    std::string getMasterIP();
+  std::string getJobId();
+  void setJobId(std::string inputJobId);
+  std::string getJobType();
+  void setJobType(std::string inputJobType);
+  void addParameter(std::string key, std::string value);
+  std::string getParameter(std::string key);
+  void setPriority(int priority);
+  int getPriority();
+  void setMasterIP(std::string masterip);
+  std::string getMasterIP();
 };
 
-
-#endif //JASMINEGRAPH_JOBREQUEST_H
+#endif  // JASMINEGRAPH_JOBREQUEST_H

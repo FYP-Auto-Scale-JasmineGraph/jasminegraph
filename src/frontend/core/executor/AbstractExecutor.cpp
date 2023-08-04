@@ -14,9 +14,7 @@ limitations under the License.
 #include "AbstractExecutor.h"
 
 AbstractExecutor::AbstractExecutor(JobRequest jobRequest) {
-    this->request = jobRequest;
+  this->request = jobRequest;
 }
 
-AbstractExecutor::AbstractExecutor() {
-
-}
+AbstractExecutor::AbstractExecutor() {}

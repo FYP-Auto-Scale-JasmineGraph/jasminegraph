@@ -17,54 +17,62 @@ Logger kafka_client_logger;
 void KafkaConnector::Subscribe(string topic) { consumer.subscribe({topic}); }
 void KafkaConnector::Unsubscribe() { consumer.unsubscribe(); }
 
-GroupInformationList KafkaConnector::Get_consumer_groups() { consumer.get_consumer_groups(); }
-void *KafkaConnector::startStream(string topicName, std::vector<DataPublisher *> workerClients,
-                                  std::map<std::string, std::atomic<bool>> *streamsState) {
-    Utils utils;
+GroupInformationList KafkaConnector::Get_consumer_groups() {
+  consumer.get_consumer_groups();
+}
+void *KafkaConnector::startStream(
+    string topicName, std::vector<DataPublisher *> workerClients,
+    std::map<std::string, std::atomic<bool>> *streamsState) {
+  Utils utils;
 
-    // After getting the topic name , need to close the connection and ask the user to send the data to given topic
+  // After getting the topic name , need to close the connection and ask the
+  // user to send the data to given topic
 
-    std::string kafkaHost = utils.getJasmineGraphProperty("org.jasminegraph.server.streaming.kafka.host");
-    cppkafka::Configuration configs = {{"metadata.broker.list", kafkaHost}, {"group.id", "jasmine"}};
-    cppkafka::Consumer consumer(configs);
-    // KafkaConnector kstream(configs);
-    std::string partitionCount = utils.getJasmineGraphProperty("org.jasminegraph.server.npartitions");
-    int numberOfPartitions = std::stoi(partitionCount);
+  std::string kafkaHost = utils.getJasmineGraphProperty(
+      "org.jasminegraph.server.streaming.kafka.host");
+  cppkafka::Configuration configs = {{"metadata.broker.list", kafkaHost},
+                                     {"group.id", "jasmine"}};
+  cppkafka::Consumer consumer(configs);
+  // KafkaConnector kstream(configs);
+  std::string partitionCount =
+      utils.getJasmineGraphProperty("org.jasminegraph.server.npartitions");
+  int numberOfPartitions = std::stoi(partitionCount);
 
-    Partitioner graphPartitioner(numberOfPartitions, 0, spt::Algorithms::HASH);
+  Partitioner graphPartitioner(numberOfPartitions, 0, spt::Algorithms::HASH);
 
-    consumer.subscribe({topicName});
-    kafka_client_logger.log("Start listening to " + topicName, "info");
-    // std::atomic<bool> shouldStop(false);
-    bool shouldStop = false;
+  consumer.subscribe({topicName});
+  kafka_client_logger.log("Start listening to " + topicName, "info");
+  // std::atomic<bool> shouldStop(false);
+  bool shouldStop = false;
 
-    while (true) {
-        cppkafka::Message msg = consumer.poll();
-        if (!msg || msg.get_error()) {
-            continue;
-        }
-        string data(msg.get_payload());
-        if (streamsState->find(topicName) != streamsState->end()) {
-            shouldStop = streamsState->find(topicName)->second;
-        }
-        if (data == "-1" || shouldStop) {  // Marks the end of stream
-            kafka_client_logger.log("Received the end of stream", "info");
-            break;
-        }
-
-        auto edgeJson = json::parse(data);
-        auto sourceJson = edgeJson["source"];
-        auto destinationJson = edgeJson["destination"];
-
-        std::string sourceID = std::string(sourceJson["id"]);
-        std::string destinationID = std::string(destinationJson["id"]);
-
-        partitionedEdge partitionedEdge = graphPartitioner.addEdge({sourceID, destinationID});
-        edgeJson["source"]["pid"] = std::to_string(partitionedEdge[0].second);
-        edgeJson["destination"]["pid"] = std::to_string(partitionedEdge[1].second);
-        workerClients.at((int)partitionedEdge[0].second)->publish(edgeJson.dump());
-        workerClients.at((int)partitionedEdge[1].second)->publish(edgeJson.dump());
+  while (true) {
+    cppkafka::Message msg = consumer.poll();
+    if (!msg || msg.get_error()) {
+      continue;
     }
-    graphPartitioner.printStats();
-    return NULL;
+    string data(msg.get_payload());
+    if (streamsState->find(topicName) != streamsState->end()) {
+      shouldStop = streamsState->find(topicName)->second;
+    }
+    if (data == "-1" || shouldStop) {  // Marks the end of stream
+      kafka_client_logger.log("Received the end of stream", "info");
+      break;
+    }
+
+    auto edgeJson = json::parse(data);
+    auto sourceJson = edgeJson["source"];
+    auto destinationJson = edgeJson["destination"];
+
+    std::string sourceID = std::string(sourceJson["id"]);
+    std::string destinationID = std::string(destinationJson["id"]);
+
+    partitionedEdge partitionedEdge =
+        graphPartitioner.addEdge({sourceID, destinationID});
+    edgeJson["source"]["pid"] = std::to_string(partitionedEdge[0].second);
+    edgeJson["destination"]["pid"] = std::to_string(partitionedEdge[1].second);
+    workerClients.at((int)partitionedEdge[0].second)->publish(edgeJson.dump());
+    workerClients.at((int)partitionedEdge[1].second)->publish(edgeJson.dump());
+  }
+  graphPartitioner.printStats();
+  return NULL;
 }

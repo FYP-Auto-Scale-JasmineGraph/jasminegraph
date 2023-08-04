@@ -12,41 +12,41 @@ limitations under the License.
  */
 
 #include "SchedulerService.h"
+
 #include "Scheduler.h"
 
 using namespace Bosma;
 
 Logger schedulerservice_logger;
 
-
 void SchedulerService::startScheduler() {
+  Utils utils;
 
-    Utils utils;
+  std::string schedulerEnabled =
+      utils.getJasmineGraphProperty("org.jasminegraph.scheduler.enabled");
 
-    std::string schedulerEnabled = utils.getJasmineGraphProperty("org.jasminegraph.scheduler.enabled");
+  if (schedulerEnabled == "true") {
+    schedulerservice_logger.log("#######SCHEDULER ENABLED#####", "info");
 
-    if (schedulerEnabled == "true") {
-
-        schedulerservice_logger.log("#######SCHEDULER ENABLED#####","info");
-
-        startPerformanceScheduler();
-    }
-
-
+    startPerformanceScheduler();
+  }
 }
 
 void SchedulerService::startPerformanceScheduler() {
-    unsigned int max_n_threads = 12;
+  unsigned int max_n_threads = 12;
 
-    Utils utils;
-    PerformanceUtil util;
-    util.init();
+  Utils utils;
+  PerformanceUtil util;
+  util.init();
 
-    Bosma::Scheduler scheduler(max_n_threads);
+  Bosma::Scheduler scheduler(max_n_threads);
 
-    std::string performanceSchedulerTiming = utils.getJasmineGraphProperty("org.jasminegraph.scheduler.performancecollector.timing");
+  std::string performanceSchedulerTiming = utils.getJasmineGraphProperty(
+      "org.jasminegraph.scheduler.performancecollector.timing");
 
-    scheduler.every(std::chrono::seconds(atoi(performanceSchedulerTiming.c_str())), util.collectPerformanceStatistics);
+  scheduler.every(
+      std::chrono::seconds(atoi(performanceSchedulerTiming.c_str())),
+      util.collectPerformanceStatistics);
 
-    std::this_thread::sleep_for(std::chrono::minutes(1440));
+  std::this_thread::sleep_for(std::chrono::minutes(1440));
 }

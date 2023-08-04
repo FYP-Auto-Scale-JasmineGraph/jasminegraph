@@ -18,30 +18,29 @@ limitations under the License.
 #include <unordered_set>
 
 using std::map;
-using std::unordered_set;
 using std::string;
+using std::unordered_set;
 
 class JasmineGraphLocalStore {
-private:
-public:
-    bool loadGraph();
+ private:
+ public:
+  bool loadGraph();
 
-    bool storeGraph();
+  bool storeGraph();
 
-    map<long, unordered_set<long>> getUnderlyingHashMap();
+  map<long, unordered_set<long>> getUnderlyingHashMap();
 
-    map<long, long> getOutDegreeDistributionHashMap();
+  map<long, long> getOutDegreeDistributionHashMap();
 
-    void initialize();
+  void initialize();
 
-    void addVertex(string *attributes);
+  void addVertex(string *attributes);
 
-    void addEdge(long startVid, long endVid);
+  void addEdge(long startVid, long endVid);
 
-    long getVertexCount();
+  long getVertexCount();
 
-    long getEdgeCount();
+  long getEdgeCount();
 };
 
-
-#endif //JASMINEGRAPH_JASMINEGRAPHLOCALSTORE_H
+#endif  // JASMINEGRAPH_JASMINEGRAPHLOCALSTORE_H

@@ -22,25 +22,25 @@ limitations under the License.
 #ifndef RELATION_BLOCK
 #define RELATION_BLOCK
 struct NodeRelation {
-    unsigned int address = 0;
-    unsigned int nextRelationId = 0;
-    unsigned int nextPid = 0;
-    unsigned int preRelationId = 0;
-    unsigned int prePid = 0;
+  unsigned int address = 0;
+  unsigned int nextRelationId = 0;
+  unsigned int nextPid = 0;
+  unsigned int preRelationId = 0;
+  unsigned int prePid = 0;
 };
 
 enum class RelationOffsets : int {
-    SOURCE = 0,
-    DESTINATION = 1,
-    SOURCE_NEXT = 2,
-    SOURCE_NEXT_PID = 3,
-    SOURCE_PREVIOUS = 4,
-    SOURCE_PREVIOUS_PID = 5,
-    DESTINATION_NEXT = 6,
-    DESTINATION_NEXT_PID = 7,
-    DESTINATION_PREVIOUS = 8,
-    DESTINATION_PREVIOUS_PID = 9,
-    RELATION_PROPS = 10,
+  SOURCE = 0,
+  DESTINATION = 1,
+  SOURCE_NEXT = 2,
+  SOURCE_NEXT_PID = 3,
+  SOURCE_PREVIOUS = 4,
+  SOURCE_PREVIOUS_PID = 5,
+  DESTINATION_NEXT = 6,
+  DESTINATION_NEXT_PID = 7,
+  DESTINATION_PREVIOUS = 8,
+  DESTINATION_PREVIOUS_PID = 9,
+  RELATION_PROPS = 10,
 };
 
 /**
@@ -54,53 +54,58 @@ enum class RelationOffsets : int {
  * **/
 
 class RelationBlock {
-   private:
-    std::string id;
-    bool updateRelationRecords(RelationOffsets, unsigned int);
-    NodeBlock *sourceBlock;
-    NodeBlock *destinationBlock;
+ private:
+  std::string id;
+  bool updateRelationRecords(RelationOffsets, unsigned int);
+  NodeBlock *sourceBlock;
+  NodeBlock *destinationBlock;
 
-   public:
-    RelationBlock(unsigned int addr, NodeRelation source, NodeRelation destination, unsigned int propertyAddress)
-        : addr(addr), source(source), destination(destination), propertyAddress(propertyAddress){};
+ public:
+  RelationBlock(unsigned int addr, NodeRelation source,
+                NodeRelation destination, unsigned int propertyAddress)
+      : addr(addr),
+        source(source),
+        destination(destination),
+        propertyAddress(propertyAddress){};
 
-    char usage;
-    unsigned int addr;  // Block size * block ID for this block
-    NodeRelation source;
-    NodeRelation destination;
-    unsigned int propertyAddress;
-    PropertyLink *propertyHead = NULL;
+  char usage;
+  unsigned int addr;  // Block size * block ID for this block
+  NodeRelation source;
+  NodeRelation destination;
+  unsigned int propertyAddress;
+  PropertyLink *propertyHead = NULL;
 
-    void save(std::fstream *cursor);
-    bool isInUse();
-    int getFlags();
+  void save(std::fstream *cursor);
+  bool isInUse();
+  int getFlags();
 
-    bool setNextSource(unsigned int);
-    bool setNextDestination(unsigned int);
-    bool setPreviousSource(unsigned int);
-    bool setPreviousDestination(unsigned int);
+  bool setNextSource(unsigned int);
+  bool setNextDestination(unsigned int);
+  bool setPreviousSource(unsigned int);
+  bool setPreviousDestination(unsigned int);
 
-    NodeBlock *getSource();
-    NodeBlock *getDestination();
-    void setSource(NodeBlock *src) { sourceBlock = src; };
-    void setDestination(NodeBlock *dst) { destinationBlock = dst; };
+  NodeBlock *getSource();
+  NodeBlock *getDestination();
+  void setSource(NodeBlock *src) { sourceBlock = src; };
+  void setDestination(NodeBlock *dst) { destinationBlock = dst; };
 
-    RelationBlock *nextSource();
-    RelationBlock *previousSource();
-    RelationBlock *nextDestination();
-    RelationBlock *previousDestination();
+  RelationBlock *nextSource();
+  RelationBlock *previousSource();
+  RelationBlock *nextDestination();
+  RelationBlock *previousDestination();
 
-    static RelationBlock *add(NodeBlock, NodeBlock);
-    static RelationBlock *get(unsigned int);
-    void addProperty(std::string, char *);
-    PropertyLink *getPropertyHead();
-    std::map<std::string, char *> getAllProperties();
+  static RelationBlock *add(NodeBlock, NodeBlock);
+  static RelationBlock *get(unsigned int);
+  void addProperty(std::string, char *);
+  PropertyLink *getPropertyHead();
+  std::map<std::string, char *> getAllProperties();
 
-    static unsigned int nextRelationIndex;
-    static const unsigned long BLOCK_SIZE;  // Size of a relation record block in bytes
-    static std::string DB_PATH;
-    static std::fstream *relationsDB;
-    static const int RECORD_SIZE = sizeof(unsigned int);
+  static unsigned int nextRelationIndex;
+  static const unsigned long
+      BLOCK_SIZE;  // Size of a relation record block in bytes
+  static std::string DB_PATH;
+  static std::fstream *relationsDB;
+  static const int RECORD_SIZE = sizeof(unsigned int);
 };
 
 #endif

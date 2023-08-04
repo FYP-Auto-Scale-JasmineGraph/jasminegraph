@@ -14,42 +14,44 @@ limitations under the License.
 #ifndef JASMINEGRAPH_STATISTICCOLLECTOR_H
 #define JASMINEGRAPH_STATISTICCOLLECTOR_H
 
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <dirent.h>
 #include <string.h>
-#include <iostream>
-#include "stdlib.h"
-#include "stdio.h"
-#include "string.h"
-#include "sys/times.h"
-#include <limits>
-#include <fstream>
-#include <thread>
-#include "../../util/Utils.h"
+#include <sys/stat.h>
+#include <sys/types.h>
+
 #include <algorithm>
 #include <cmath>
-#include <sstream>
+#include <fstream>
 #include <iomanip>
-#include "PerformanceUtil.h"
+#include <iostream>
+#include <limits>
+#include <sstream>
+#include <thread>
 
+#include "../../util/Utils.h"
+#include "PerformanceUtil.h"
+#include "stdio.h"
+#include "stdlib.h"
+#include "string.h"
+#include "sys/times.h"
 
 class StatisticCollector {
-private:
-    static const int BUFFER_SIZE = 128;
-public:
-    int init();
-    static int getMemoryUsageByProcess();
-    static int parseLine(char* line);
-    static double getCpuUsage();
-    static std::string collectVMStatistics(std::string isVMStatManager, std::string isTotalAllocationRequired);
-    static long getTotalMemoryAllocated();
-    static int getTotalNumberofCores();
-    static long getTotalMemoryUsage();
-    static double getTotalCpuUsage();
-    static double getLoadAverage();
-    static void logLoadAverage(std::string name);
+ private:
+  static const int BUFFER_SIZE = 128;
+
+ public:
+  int init();
+  static int getMemoryUsageByProcess();
+  static int parseLine(char *line);
+  static double getCpuUsage();
+  static std::string collectVMStatistics(std::string isVMStatManager,
+                                         std::string isTotalAllocationRequired);
+  static long getTotalMemoryAllocated();
+  static int getTotalNumberofCores();
+  static long getTotalMemoryUsage();
+  static double getTotalCpuUsage();
+  static double getLoadAverage();
+  static void logLoadAverage(std::string name);
 };
 
-
-#endif //JASMINEGRAPH_STATISTICCOLLECTOR_H
+#endif  // JASMINEGRAPH_STATISTICCOLLECTOR_H

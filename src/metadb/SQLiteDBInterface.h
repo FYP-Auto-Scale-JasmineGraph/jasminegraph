@@ -14,30 +14,32 @@ limitations under the License.
 #ifndef JASMINEGRAPH_SQLITEDBINTERFACE_H
 #define JASMINEGRAPH_SQLITEDBINTERFACE_H
 
-#include "../util/sqlite3/sqlite3.h"
-#include <vector>
 #include <map>
+#include <vector>
+
+#include "../util/sqlite3/sqlite3.h"
 
 class SQLiteDBInterface {
-private:
-    sqlite3 *database;
-public:
-    int init();
+ private:
+  sqlite3 *database;
 
-    int finalize();
+ public:
+  int init();
 
-    std::vector<std::vector<std::pair<std::string, std::string>>> runSelect(std::string);
+  int finalize();
 
-    int runInsert(std::string);
+  std::vector<std::vector<std::pair<std::string, std::string>>> runSelect(
+      std::string);
 
-    void runUpdate(std::string);
+  int runInsert(std::string);
 
-    void runInsertNoIDReturn(std::string);
+  void runUpdate(std::string);
 
-    int RunSqlNoCallback(const char *zSql);
+  void runInsertNoIDReturn(std::string);
 
-    SQLiteDBInterface();
+  int RunSqlNoCallback(const char *zSql);
+
+  SQLiteDBInterface();
 };
 
-
-#endif //JASMINEGRAPH_SQLITEDBINTERFACE_H
+#endif  // JASMINEGRAPH_SQLITEDBINTERFACE_H

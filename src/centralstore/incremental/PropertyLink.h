@@ -20,30 +20,34 @@ limitations under the License.
 #define PROPERTY_LINK
 
 class PropertyLink {
-   public:
-    static const unsigned long MAX_NAME_SIZE = 12;    // Size of a property name in bytes
-    static const unsigned long MAX_VALUE_SIZE = 180;  // Size of a property value in bytes
-    static unsigned int nextPropertyIndex;            // Next available property block index
-    // unless open in wipe data
-    // mode(trunc) need to set this value to property db seekp()/BLOCK_SIZE
-    static const unsigned long PROPERTY_BLOCK_SIZE = MAX_NAME_SIZE + MAX_VALUE_SIZE + sizeof(unsigned int);
-    
-    std::string name;
-    char value[PropertyLink::MAX_VALUE_SIZE] = {0};
-    unsigned int blockAddress;  // contains the address of the first element in the list
-    unsigned int nextPropAddress;
+ public:
+  static const unsigned long MAX_NAME_SIZE =
+      12;  // Size of a property name in bytes
+  static const unsigned long MAX_VALUE_SIZE =
+      180;                                // Size of a property value in bytes
+  static unsigned int nextPropertyIndex;  // Next available property block index
+  // unless open in wipe data
+  // mode(trunc) need to set this value to property db seekp()/BLOCK_SIZE
+  static const unsigned long PROPERTY_BLOCK_SIZE =
+      MAX_NAME_SIZE + MAX_VALUE_SIZE + sizeof(unsigned int);
 
-    static std::string DB_PATH;
-    static std::fstream* propertiesDB;
+  std::string name;
+  char value[PropertyLink::MAX_VALUE_SIZE] = {0};
+  unsigned int
+      blockAddress;  // contains the address of the first element in the list
+  unsigned int nextPropAddress;
 
-    PropertyLink(unsigned int);
-    PropertyLink(unsigned int, std::string, char*, unsigned int);
-    bool isEmpty();
-    static PropertyLink* get(unsigned int);
-    static PropertyLink* create(std::string, char[]);
+  static std::string DB_PATH;
+  static std::fstream *propertiesDB;
 
-    unsigned int insert(std::string, char[]);
-    PropertyLink* next();
+  PropertyLink(unsigned int);
+  PropertyLink(unsigned int, std::string, char *, unsigned int);
+  bool isEmpty();
+  static PropertyLink *get(unsigned int);
+  static PropertyLink *create(std::string, char[]);
+
+  unsigned int insert(std::string, char[]);
+  PropertyLink *next();
 };
 
 #endif

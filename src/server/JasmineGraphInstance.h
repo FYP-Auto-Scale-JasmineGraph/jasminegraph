@@ -15,47 +15,52 @@ limitations under the License.
 #define JASMINEGRAPH_JASMINEGRAPHINSTANCE_H
 
 #include <map>
+
+#include "../localstore/JasmineGraphHashMapLocalStore.h"
 #include "../localstore/JasmineGraphLocalStore.h"
 #include "../metadb/SQLiteDBInterface.h"
+#include "../performance/metrics/PerformanceUtil.h"
 #include "JasmineGraphInstanceFileTransferService.h"
 #include "JasmineGraphInstanceService.h"
-#include "../localstore/JasmineGraphHashMapLocalStore.h"
-#include "../performance/metrics/PerformanceUtil.h"
 
 using std::map;
 
 class JasmineGraphInstance {
-private:
-    map<std::string, JasmineGraphLocalStore> graphDBMapLocalStores;
-    static const int BUFFER_SIZE = 128;
-public:
-    SQLiteDBInterface sqlite;
-    int start_running(string profile, string hostName, string masterHost,int serverPort, int serverDataPort, string enableNmon);
+ private:
+  map<std::string, JasmineGraphLocalStore> graphDBMapLocalStores;
+  static const int BUFFER_SIZE = 128;
 
-    bool acknowledgeMaster(string masterHost, string workerIP, string workerPort);
+ public:
+  SQLiteDBInterface sqlite;
+  int start_running(string profile, string hostName, string masterHost,
+                    int serverPort, int serverDataPort, string enableNmon);
 
-    void startNmonAnalyzer(string enableNmon, int serverPort);
+  bool acknowledgeMaster(string masterHost, string workerIP, string workerPort);
 
-    void registerShutdownHook();
+  void startNmonAnalyzer(string enableNmon, int serverPort);
 
-    void truncate();
+  void registerShutdownHook();
 
-    void shutdown();
+  void truncate();
 
-    bool isRunning();
+  void shutdown();
 
-    string hostName;
-    string profile;
-    string masterHostName;
-    int serverPort;
-    int serverDataPort;
-    string enableNmon;
+  bool isRunning();
 
-    JasmineGraphInstanceService *instanceService;
-    JasmineGraphInstanceFileTransferService *ftpService;
-    static bool sendFileThroughService(std::string host, int dataPort, std::string fileName, std::string filePath);
+  string hostName;
+  string profile;
+  string masterHostName;
+  int serverPort;
+  int serverDataPort;
+  string enableNmon;
 
-    static void logLoadAverage(std::string name);
+  JasmineGraphInstanceService *instanceService;
+  JasmineGraphInstanceFileTransferService *ftpService;
+  static bool sendFileThroughService(std::string host, int dataPort,
+                                     std::string fileName,
+                                     std::string filePath);
+
+  static void logLoadAverage(std::string name);
 };
 
-#endif //JASMINEGRAPH_JASMINEGRAPHINSTANCE_H
+#endif  // JASMINEGRAPH_JASMINEGRAPHINSTANCE_H

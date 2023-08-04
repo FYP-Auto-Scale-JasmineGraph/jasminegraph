@@ -14,74 +14,74 @@ limitations under the License.
 #ifndef JASMINEGRAPH_JASMINEGRAPHHASHMAPCENTRALSTORE_H
 #define JASMINEGRAPH_JASMINEGRAPHHASHMAPCENTRALSTORE_H
 
-#include "../localstore/JasmineGraphLocalStore.h"
+#include <flatbuffers/util.h>
+
 #include <map>
 #include <set>
+
+#include "../localstore/JasmineGraphLocalStore.h"
 #include "../util/Utils.h"
-#include "../util/dbutil/edgestore_generated.h"
 #include "../util/dbutil/attributestore_generated.h"
+#include "../util/dbutil/edgestore_generated.h"
 #include "../util/dbutil/partedgemapstore_generated.h"
-#include <flatbuffers/util.h>
 
 using std::string;
 using namespace JasmineGraph::Edgestore;
 using namespace JasmineGraph::AttributeStore;
 using namespace JasmineGraph::PartEdgeMapStore;
 
+class JasmineGraphHashMapCentralStore : public JasmineGraphLocalStore {
+ private:
+  string VERTEX_STORE_NAME = "jasminegraph.nodestore.db";
+  string CENTRAL_STORE_NAME = "jasminegraph.centralstore.db";
+  string ATTRIBUTE_STORE_NAME = "jasminegraph.attributestore.db";
 
-class JasmineGraphHashMapCentralStore: public JasmineGraphLocalStore {
-private:
-    string VERTEX_STORE_NAME = "jasminegraph.nodestore.db";
-    string CENTRAL_STORE_NAME = "jasminegraph.centralstore.db";
-    string ATTRIBUTE_STORE_NAME = "jasminegraph.attributestore.db";
+  int graphId = 0;
+  int partitionId = 0;
 
-    int graphId = 0;
-    int  partitionId = 0;
+  string instanceDataFolderLocation;
+  std::map<long, unordered_set<long>> centralSubgraphMap;
 
-    string instanceDataFolderLocation;
-    std::map<long,unordered_set<long>> centralSubgraphMap;
+  long vertexCount = 0;
+  long edgeCount = 0;
 
-    long vertexCount = 0;
-    long edgeCount =0;
+  std::string getFileSeparator();
 
-    std::string getFileSeparator();
+  void toLocalSubGraphMap(const PartEdgeMapStore *edgeMapStoreData);
 
-    void toLocalSubGraphMap(const PartEdgeMapStore *edgeMapStoreData);
+  void toLocalAttributeMap(const AttributeStore *attributeStoreData);
 
-    void toLocalAttributeMap(const AttributeStore *attributeStoreData);
+ public:
+  JasmineGraphHashMapCentralStore();
 
-public:
-    JasmineGraphHashMapCentralStore();
+  JasmineGraphHashMapCentralStore(int graphId, int partitionId);
 
-    JasmineGraphHashMapCentralStore(int graphId, int partitionId);
+  JasmineGraphHashMapCentralStore(std::string folderLocation);
 
-    JasmineGraphHashMapCentralStore(std::string folderLocation);
+  bool loadGraph();
 
-    bool loadGraph();
+  bool loadGraph(std::string fileName);
 
-    bool loadGraph(std::string fileName);
+  bool storeGraph();
 
-    bool storeGraph();
+  map<long, unordered_set<long>> getUnderlyingHashMap();
 
-    map<long, unordered_set<long>> getUnderlyingHashMap();
+  map<long, long> getOutDegreeDistributionHashMap();
 
-    map<long, long> getOutDegreeDistributionHashMap();
+  map<long, long> getInDegreeDistributionHashMap();
 
-    map<long, long> getInDegreeDistributionHashMap();
+  void initialize();
 
-    void initialize();
+  void addVertex(string *attributes);
 
-    void addVertex(string *attributes);
+  void addEdge(long startVid, long endVid);
 
-    void addEdge(long startVid, long endVid);
+  long getVertexCount();
 
-    long getVertexCount();
+  long getEdgeCount();
 
-    long getEdgeCount();
-
-    bool storePartEdgeMap(std::map<int, std::vector<int>> edgeMap, const std::string savePath);
+  bool storePartEdgeMap(std::map<int, std::vector<int>> edgeMap,
+                        const std::string savePath);
 };
 
-
-
-#endif //JASMINEGRAPH_JASMINEGRAPHHASHMAPCENTRALSTORE_H
+#endif  // JASMINEGRAPH_JASMINEGRAPHHASHMAPCENTRALSTORE_H

@@ -14,98 +14,82 @@ limitations under the License.
 #ifndef JASMINEGRAPH_RDFPARTITIONER_H
 #define JASMINEGRAPH_RDFPARTITIONER_H
 
-
-#include <string>
 #include <string.h>
+
+#include <algorithm>
+#include <cstddef>
 #include <fstream>
 #include <iostream>
-#include <sstream>
 #include <map>
-#include <vector>
-#include <unordered_set>
 #include <set>
-#include "metis.h"
+#include <sstream>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
 #include "../../metadb/SQLiteDBInterface.h"
 #include "../../util/Utils.h"
-#include <cstddef>
-#include <algorithm>
-#include <unordered_map>
-#include <vector>
-#include <set>
+#include "metis.h"
 
 using namespace __gnu_cxx;
 
-//using namespace std;
+// using namespace std;
 
 using std::string;
 
-
 class RDFPartitioner {
-public:
-    RDFPartitioner(SQLiteDBInterface *);
+ public:
+  RDFPartitioner(SQLiteDBInterface *);
 
-    void convert(string graphName,
-                 int graphID,
-                 string inputFilePath,
-                 string outputFilePath,
-                 int nParts,
-                 bool isDistributedCentralPartitions,
-                 int nThreads,
-                 int nPlaces);
+  void convert(string graphName, int graphID, string inputFilePath,
+               string outputFilePath, int nParts,
+               bool isDistributedCentralPartitions, int nThreads, int nPlaces);
 
-    void convertWithoutDistribution(string graphName,
-                                    int graphID,
-                                    string inputFilePath,
-                                    string outputFilePath,
-                                    int nParts,
-                                    bool isDistributedCentralPartitions,
-                                    int nThreads,
-                                    int nPlaces);
+  void convertWithoutDistribution(string graphName, int graphID,
+                                  string inputFilePath, string outputFilePath,
+                                  int nParts,
+                                  bool isDistributedCentralPartitions,
+                                  int nThreads, int nPlaces);
 
-    void loadDataSet(string inputFilePath, string outputFilePath, int graphID);
+  void loadDataSet(string inputFilePath, string outputFilePath, int graphID);
 
-    void distributeEdges();
+  void distributeEdges();
 
-    long addToNodes(std::map<string, long> *map, string URI);
+  long addToNodes(std::map<string, long> *map, string URI);
 
-    long addToPredicates(std::map<string, long> *map, string URI);
+  long addToPredicates(std::map<string, long> *map, string URI);
 
+  void addToMap(std::map<long, std::map<long, std::set<string>>> *map,
+                long vertex, long relation, string value);
 
-    void addToMap(std::map<long, std::map<long, std::set<string> >> *map, long vertex, long relation, string value);
+  void writeRelationData();
 
-    void writeRelationData();
+ private:
+  string outputFilePath;
+  int nParts;
+  string graphName;
+  int graphID;
+  int nThreads;
+  int nPlaces;
+  bool isDistributedCentralPartitions;
 
+  SQLiteDBInterface sqlite;
 
-private:
+  string inputFilePath;
 
-    string outputFilePath;
-    int nParts;
-    string graphName;
-    int graphID;
-    int nThreads;
-    int nPlaces;
-    bool isDistributedCentralPartitions;
+  Utils utils;
 
-    SQLiteDBInterface sqlite;
+  std::map<string, long> nodes;
+  std::map<long, string> nodesTemp;
+  std::map<string, long> predicates;
+  std::map<long, string> predicatesTemp;
+  std::map<long, std::set<long>> graphStorage;
+  std::map<long, std::map<long, std::set<string>>> relationsMap;
+  std::map<long, std::map<long, std::vector<string>>> attributeMap;
 
-
-    string inputFilePath;
-
-    Utils utils;
-
-
-    std::map<string, long> nodes;
-    std::map<long, string> nodesTemp;
-    std::map<string, long> predicates;
-    std::map<long, string> predicatesTemp;
-    std::map<long, std::set<long> > graphStorage;
-    std::map<long, std::map<long, std::set<string>>> relationsMap;
-    std::map<long, std::map<long, std::vector<string>>> attributeMap;
-
-    long edgeCount=0;
-    long vertexCount=0;
-
+  long edgeCount = 0;
+  long vertexCount = 0;
 };
 
-
-#endif //JASMINEGRAPH_RDFPARTITIONER_H
+#endif  // JASMINEGRAPH_RDFPARTITIONER_H

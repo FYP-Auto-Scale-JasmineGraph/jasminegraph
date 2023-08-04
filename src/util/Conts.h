@@ -14,13 +14,12 @@ limitations under the License.
 #ifndef JASMINEGRAPH_CONTS_H
 #define JASMINEGRAPH_CONTS_H
 
-
-#include <string>
-#include <set>
-#include <vector>
 #include <atomic>
-#include <mutex>
 #include <map>
+#include <mutex>
+#include <set>
+#include <string>
+#include <vector>
 
 extern int highestPriority;
 extern std::atomic<int> highPriorityTaskCount;
@@ -38,122 +37,125 @@ extern std::mutex aggregateWeightMutex;
 extern std::mutex triangleTreeMutex;
 
 struct ProcessInfo {
-    int id;
-    std::string graphId;
-    std::string processName;
-    long sleepTime;
-    long startTimestamp;
-    int priority;
-    std::vector<std::string> workerList;
+  int id;
+  std::string graphId;
+  std::string processName;
+  long sleepTime;
+  long startTimestamp;
+  int priority;
+  std::vector<std::string> workerList;
 };
 
-struct ResourceUsageInfo{
-    std::string elapsedTime;
-    std::string loadAverage;
-    std::string memoryUsage;
+struct ResourceUsageInfo {
+  std::string elapsedTime;
+  std::string loadAverage;
+  std::string memoryUsage;
 };
 
 extern std::set<ProcessInfo> processData;
-extern std::map<std::string,std::vector<ResourceUsageInfo>> resourceUsageMap;
+extern std::map<std::string, std::vector<ResourceUsageInfo>> resourceUsageMap;
 
 class Conts {
-public:
-    std::string BATCH_UPLOAD_FILE_LIST = "conf/batch-upload.txt";
-    std::string JASMINEGRAPH_SERVER_PROPS_FILE = "conf/acacia-server.properties";
-    std::string JASMINEGRAPH_SERVER_PUBLIC_HOSTS_FILE = "machines_public.txt";
-    std::string JASMINEGRAPH_SERVER_PRIVATE_HOSTS_FILE = "machines.txt";
-    static std::string JASMINEGRAPH_EXECUTABLE;
-    static std::string JASMINEGRAPH_HOME;
-    static std::string GRAPH_TYPE_RDF ;
-    static std::string GRAPH_TYPE_NORMAL ;
-    static std::string GRAPH_TYPE_NORMAL_REFORMATTED;
-    static std::string GRAPH_WITH_TEXT_ATTRIBUTES;
-    static std::string GRAPH_WITH_JSON_ATTRIBUTES;
-    static std::string GRAPH_WITH_XML_ATTRIBUTES;
+ public:
+  std::string BATCH_UPLOAD_FILE_LIST = "conf/batch-upload.txt";
+  std::string JASMINEGRAPH_SERVER_PROPS_FILE = "conf/acacia-server.properties";
+  std::string JASMINEGRAPH_SERVER_PUBLIC_HOSTS_FILE = "machines_public.txt";
+  std::string JASMINEGRAPH_SERVER_PRIVATE_HOSTS_FILE = "machines.txt";
+  static std::string JASMINEGRAPH_EXECUTABLE;
+  static std::string JASMINEGRAPH_HOME;
+  static std::string GRAPH_TYPE_RDF;
+  static std::string GRAPH_TYPE_NORMAL;
+  static std::string GRAPH_TYPE_NORMAL_REFORMATTED;
+  static std::string GRAPH_WITH_TEXT_ATTRIBUTES;
+  static std::string GRAPH_WITH_JSON_ATTRIBUTES;
+  static std::string GRAPH_WITH_XML_ATTRIBUTES;
 
-    static std::string GRAPH_WITH_ATTRIBUTES;       //To identify that there are additional attribute files to be uploaded through workers
+  static std::string
+      GRAPH_WITH_ATTRIBUTES;  // To identify that there are additional attribute
+                              // files to be uploaded through workers
 
-    struct GRAPH_WITH {
-        static std::string TEXT_ATTRIBUTES;         //Graph is uploaded with edge list and a plain text attribute file
-        static std::string JSON_ATTRIBUTES;         //Graph is uploaded with edge list and a JSON formatted attribute file
-        static std::string XML_ATTRIBUTES;          //Graph is uploaded with edge list and a XML formatted attribute file
-    };
+  struct GRAPH_WITH {
+    static std::string TEXT_ATTRIBUTES;  // Graph is uploaded with edge list and
+                                         // a plain text attribute file
+    static std::string JSON_ATTRIBUTES;  // Graph is uploaded with edge list and
+                                         // a JSON formatted attribute file
+    static std::string XML_ATTRIBUTES;  // Graph is uploaded with edge list and
+                                        // a XML formatted attribute file
+  };
 
+  int JASMINEGRAPH_PARTITION_INDEX_PORT;
+  static int JASMINEGRAPH_FRONTEND_PORT;
+  static int JASMINEGRAPH_BACKEND_PORT;
+  static int JASMINEGRAPH_VERTEXCOUNTER_PORT;
+  static int JASMINEGRAPH_INSTANCE_PORT;
+  static int JASMINEGRAPH_INSTANCE_DATA_PORT;
+  static int JASMINEGRAPH_RUNTIME_PROFILE_MASTER;
+  static int JASMINEGRAPH_RUNTIME_PROFILE_WORKER;
+  static int JASMINEGRAPH_WORKER_ACKNOWLEDGEMENT_TIMEOUT;
+  static int COMPOSITE_CENTRAL_STORE_WORKER_THRESHOLD;
+  static int NUMBER_OF_COMPOSITE_CENTRAL_STORES;
+  static int RDF_NUM_OF_ATTRIBUTES;
+  static int MAX_SLA_CALIBRATE_ATTEMPTS;
+  static int LOAD_AVG_COLLECTING_GAP;
+  static double LOAD_AVG_THREASHOLD;
 
-    int JASMINEGRAPH_PARTITION_INDEX_PORT;
-    static int JASMINEGRAPH_FRONTEND_PORT;
-    static int JASMINEGRAPH_BACKEND_PORT;
-    static int JASMINEGRAPH_VERTEXCOUNTER_PORT;
-    static int JASMINEGRAPH_INSTANCE_PORT;
-    static int JASMINEGRAPH_INSTANCE_DATA_PORT;
-    static int JASMINEGRAPH_RUNTIME_PROFILE_MASTER;
-    static int JASMINEGRAPH_RUNTIME_PROFILE_WORKER;
-    static int JASMINEGRAPH_WORKER_ACKNOWLEDGEMENT_TIMEOUT;
-    static int COMPOSITE_CENTRAL_STORE_WORKER_THRESHOLD;
-    static int NUMBER_OF_COMPOSITE_CENTRAL_STORES;
-    static int RDF_NUM_OF_ATTRIBUTES;
-    static int MAX_SLA_CALIBRATE_ATTEMPTS;
-    static int LOAD_AVG_COLLECTING_GAP;
-    static double LOAD_AVG_THREASHOLD;
+  static int GRAPH_TYPE_TEXT;
 
-    static int GRAPH_TYPE_TEXT;
+  static int MAX_FE_SESSIONS;
 
-    static int MAX_FE_SESSIONS;
+  static int DEFAULT_THREAD_PRIORITY;
+  static int HIGH_PRIORITY_DEFAULT_VALUE;
 
-    static int DEFAULT_THREAD_PRIORITY;
-    static int HIGH_PRIORITY_DEFAULT_VALUE;
+  static int THREAD_SLEEP_TIME;  // Thread sleep time in milliseconds
+  static int MAX_HIGH_PRIORIY_TASKS;
 
-    static int THREAD_SLEEP_TIME;       //Thread sleep time in milliseconds
-    static int MAX_HIGH_PRIORIY_TASKS;
+  static int SCHEDULER_SLEEP_TIME;
 
-    static int SCHEDULER_SLEEP_TIME;
+  struct GRAPH_STATUS {
+    static const int LOADING;  // Graph partitions are being uploaded
+    static const int
+        OPERATIONAL;  // Graph is uploaded and all its partitions are accessible
+                      // in the current hosts setting
+    static const int DELETING;  // Graph partitions are being deleted
+    static const int
+        NONOPERATIONAL;  // Graph is uploaded but some partitions of it are not
+                         // accessible with the current set of active hosts
+  };
 
+  struct TRAIN_STATUS {
+    static const std::string TRAINED;
+    static const std::string NOT_TRAINED;
+  };
 
+  struct FLAGS {
+    static const std::string GRAPH_ID;
+    static const std::string LEARNING_RATE;
+    static const std::string BATCH_SIZE;
+    static const std::string VALIDATE_ITER;
+    static const std::string EPOCHS;
+    static const std::string MODEL_ID;
+  };
 
-    struct GRAPH_STATUS {
-        static const int LOADING;           //Graph partitions are being uploaded
-        static const int OPERATIONAL;       //Graph is uploaded and all its partitions are accessible in the current hosts setting
-        static const int DELETING;          //Graph partitions are being deleted
-        static const int NONOPERATIONAL;    //Graph is uploaded but some partitions of it are not accessible with the current set of active hosts
-    };
+  struct SLA_CATEGORY {
+    static const std::string LATENCY;
+  };
 
-    struct TRAIN_STATUS {
-        static const std::string TRAINED;
-        static const std::string NOT_TRAINED;
-    };
-
-    struct FLAGS {
-        static const std::string GRAPH_ID;
-        static const std::string LEARNING_RATE;
-        static const std::string BATCH_SIZE;
-        static const std::string VALIDATE_ITER;
-        static const std::string EPOCHS;
-        static const std::string MODEL_ID;
-    };
-
-    struct SLA_CATEGORY {
-        static const std::string LATENCY;
-    };
-
-    struct PARAM_KEYS {
-        static const std::string ERROR_MESSAGE;
-        static const std::string MASTER_IP;
-        static const std::string GRAPH_ID;
-        static const std::string PRIORITY;
-        static const std::string TRIANGLE_COUNT;
-        static const std::string CAN_CALIBRATE;
-        static const std::string CATEGORY;
-        static const std::string QUEUE_TIME;
-        static const std::string GRAPH_SLA;
-        static const std::string IS_CALIBRATING;
-    };
-
-
+  struct PARAM_KEYS {
+    static const std::string ERROR_MESSAGE;
+    static const std::string MASTER_IP;
+    static const std::string GRAPH_ID;
+    static const std::string PRIORITY;
+    static const std::string TRIANGLE_COUNT;
+    static const std::string CAN_CALIBRATE;
+    static const std::string CATEGORY;
+    static const std::string QUEUE_TIME;
+    static const std::string GRAPH_SLA;
+    static const std::string IS_CALIBRATING;
+  };
 };
 
-inline bool operator<(const ProcessInfo& lhs, const ProcessInfo& rhs)
-{
-    return lhs.id < rhs.id;
+inline bool operator<(const ProcessInfo &lhs, const ProcessInfo &rhs) {
+  return lhs.id < rhs.id;
 }
 
-#endif //JASMINEGRAPH_CONTS_H
+#endif  // JASMINEGRAPH_CONTS_H
