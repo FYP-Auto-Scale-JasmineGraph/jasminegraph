@@ -131,15 +131,13 @@ GetConfig::~GetConfig() {
  *  @param in configFile The text string name of the HLA configuration file.
  */
 
-void GetConfig::readConfigFile(string &configFile, int graphId)
-/* throw(std::runtime_error) */ {
+void GetConfig::readConfigFile(string &configFile, int graphId) {
   struct stat fileStatus;
   this->graphID = graphId;
   ofstream file;
 
   errno = 0;
-  if (stat(configFile.c_str(), &fileStatus) == -1)  // ==0 ok; ==-1 error
-  {
+  if (stat(configFile.c_str(), &fileStatus) == -1) {  // ==0 ok; ==-1 error
     if (errno == ENOENT)  // errno declared by include file errno.h
       throw(std::runtime_error(
           "Path file_name does not exist, or path is an empty string."));
@@ -184,8 +182,7 @@ void GetConfig::readConfigFile(string &configFile, int graphId)
 
       DOMNode *currentNode = children->item(xx);
       if (currentNode->getNodeType() &&  // true is not NULL
-          currentNode->getNodeType() == DOMNode::ELEMENT_NODE)  // is element
-      {
+          currentNode->getNodeType() == DOMNode::ELEMENT_NODE) {  // is element
         // Found node which is an Element. Re-cast node as element
         DOMElement *currentElement =
             dynamic_cast<xercesc::DOMElement *>(currentNode);
@@ -226,8 +223,7 @@ void GetConfig::readConfigFile(string &configFile, int graphId)
             DOMNode *currentNode2 = children2->item(xx2);
             if (currentNode2->getNodeType() &&  // true is not NULL
                 currentNode2->getNodeType() ==
-                    DOMNode::ELEMENT_NODE)  // is element
-            {
+                    DOMNode::ELEMENT_NODE) {  // is element
               DOMElement *currentElement2 =
                   dynamic_cast<xercesc::DOMElement *>(currentNode2);
               if (XMLString::equals(currentElement2->getTagName(),
@@ -280,8 +276,7 @@ void GetConfig::readConfigFile(string &configFile, int graphId)
                   DOMNode *dateEle = dateElements->item(e);
                   if (dateEle->getNodeType() &&
                       dateEle->getNodeType() ==
-                          DOMNode::ELEMENT_NODE)  // is element
-                  {
+                          DOMNode::ELEMENT_NODE) {  // is element
                     DOMElement *currentDateElement =
                         dynamic_cast<xercesc::DOMElement *>(dateEle);
                     if (XMLString::equals(currentDateElement->getTagName(),
@@ -329,7 +324,6 @@ void GetConfig::readConfigFile(string &configFile, int graphId)
         writeEdgesToFile();
       }
     }
-
   } catch (xercesc::XMLException &e) {
     char *message = xercesc::XMLString::transcode(e.getMessage());
     ostringstream errBuf;

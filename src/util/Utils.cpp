@@ -19,7 +19,7 @@ limitations under the License.
 
 #include <sstream>
 #include <vector>
-//#include "../frontend/JasmineGraphFrontEnd.h"
+
 #include "Conts.h"
 #include "logger/Logger.h"
 
@@ -390,8 +390,8 @@ void Utils::unzipFile(std::string filePath, const std::string mode) {
 int Utils::parseARGS(char **args, char *line) {
   int tmp = 0;
   args[tmp] = strtok(line, ":");
-  while ((args[++tmp] = strtok(NULL, ":")) != NULL)
-    ;
+  while ((args[++tmp] = strtok(NULL, ":")) != NULL) {
+  }
   return tmp - 1;
 }
 

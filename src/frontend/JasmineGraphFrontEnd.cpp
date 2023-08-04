@@ -100,8 +100,8 @@ void listen_to_kafka_topic(KafkaConnector *kstream,
         ->publish(destinationJson.dump());
     //      storing Node block
     if (temp_s == temp_d) {
-      //+miyurud: Temorarily commeting the following line to make the code build
-      // workerClients.at((int)
+      // +miyurud: Temorarily commeting the following line to make the code
+      // build workerClients.at((int)
       // partitionedEdge[0].second)->publish_relation(obj.dump());
     }
   }
@@ -715,10 +715,9 @@ void *frontendservicesesion(std::string masterIP, int connFd,
             "org.jasminegraph.server.streaming.kafka.host");
         configs = {{"metadata.broker.list", kafka_server_IP},
                    {"group.id", "knnect"}};
-      }
-      //          user need to start relevant kafka cluster using relevant IP
-      //          address read relevant IP address from given file path
-      else {
+      } else {
+        //          user need to start relevant kafka cluster using relevant IP
+        //          address read relevant IP address from given file path
         string message = "Send file path to the kafka configuration file.";
         int result_wr = write(connFd, message.c_str(), message.length());
         if (result_wr < 0) {
@@ -1786,7 +1785,6 @@ JasmineGraphFrontEnd::JasmineGraphFrontEnd(SQLiteDBInterface db,
 int JasmineGraphFrontEnd::run() {
   int pId;
   int portNo = Conts::JASMINEGRAPH_FRONTEND_PORT;
-  ;
   int listenFd;
   socklen_t len;
   bool loop = false;
@@ -1847,7 +1845,6 @@ int JasmineGraphFrontEnd::run() {
     struct frontendservicesessionargs *frontendservicesessionargs1 =
         (struct frontendservicesessionargs *)malloc(
             sizeof(struct frontendservicesessionargs) * 1);
-    ;
     frontendservicesessionargs1->sqlite = this->sqlite;
     frontendservicesessionargs1->connFd = connFd;
 

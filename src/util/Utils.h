@@ -13,14 +13,13 @@ limitations under the License.
 #ifndef JASMINEGRAPH_UTILS_H
 #define JASMINEGRAPH_UTILS_H
 
+#include <string.h>
+
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <map>
 #include <vector>
-//#include "../frontend/JasmineGraphFrontEnd.h"
-#include <string.h>
-
-#include <algorithm>
 
 #include "../metadb/SQLiteDBInterface.h"
 #include "../performancedb/PerformanceSQLiteDBInterface.h"

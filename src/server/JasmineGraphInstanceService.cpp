@@ -3937,7 +3937,6 @@ bool JasmineGraphInstanceService::duplicateCentralStore(
         server = gethostbyname(host.c_str());
         if (server == NULL) {
           instance_logger.log("ERROR, no host named ", "error");
-          ;
         }
 
         bzero((char *)&serv_addr, sizeof(serv_addr));

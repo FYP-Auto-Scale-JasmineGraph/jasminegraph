@@ -154,7 +154,6 @@ void TriangleCountExecutor::execute() {
       host = ip;
     } else {
       host = user + "@" + ip;
-      ;
     }
 
     if (partitionMap.find(workerID) == partitionMap.end()) {

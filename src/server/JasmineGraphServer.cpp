@@ -819,7 +819,6 @@ void JasmineGraphServer::uploadGraphLocally(
   Utils utils;
   if (masterHost.empty()) {
     masterHost = utils.getJasmineGraphProperty("org.jasminegraph.server.host");
-    ;
   }
   int total_threads = partitionFileList.size() + centralStoreFileList.size() +
                       centralStoreDuplFileList.size() +
