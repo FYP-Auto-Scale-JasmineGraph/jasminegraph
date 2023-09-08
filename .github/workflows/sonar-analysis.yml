@@ -1,0 +1,38 @@
+name: SonarCloud Analysis
+on:
+    push:
+      branches: [master]
+    pull_request:
+      branches: [master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: miyurud/jasminegraph:latest
+    env:
+        BUILD_WRAPPER_OUT_DIR: build_wrapper_output_directory # Directory where build-wrapper output will be placed
+        HOME: "/home/ubuntu"
+        JASMINEGRAPH_HOME: "/home/ubuntu/software/jasminegraph"
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{github.head_ref}}
+        fetch-depth: 0
+        repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+
+    - name: Install sonar-scanner and build-wrapper
+      uses: SonarSource/sonarcloud-github-c-cpp@v1
+
+    - name: Run build-wrapper
+      run: |
+        build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} sh build.sh
+
+    - name: Run sonar-scanner
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      run: |
+        sonar-scanner --define sonar.cfamily.build-wrapper-output="${{ env.BUILD_WRAPPER_OUT_DIR }}"
+    
