@@ -90,7 +90,7 @@ for d in "${WORKER_LOG_DIR}"/worker_*; do
 done
 
 cd "$LOG_DIR"
-if [ "$exit_code" != '0' ]; then
+if true || [ "$exit_code" != '0' ]; then
     echo
     echo -e '\e[33;1mMaster log:\e[0m'
     cat "$RUN_LOG"
