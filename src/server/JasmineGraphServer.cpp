@@ -27,6 +27,7 @@ limitations under the License.
 #include "../util/logger/Logger.h"
 #include "JasmineGraphInstance.h"
 #include "JasmineGraphInstanceProtocol.h"
+#include "../util/Conts.h"
 
 Logger server_logger;
 
@@ -109,13 +110,13 @@ void JasmineGraphServer::start_workers() {
     int numberOfWorkersPerHost;
     std::vector<std::string> hostsList;
     std::string nWorkers;
-    if (profile == "native") {
+    if (profile == Conts::PROFILE_NATIVE) {
         hostsList = utils.getHostListFromProperties();
         if ((this->numberOfWorkers) == -1) {
             nWorkers = utils.getJasmineGraphProperty("org.jasminegraph.server.nworkers");
         }
         enableNmon = utils.getJasmineGraphProperty("org.jasminegraph.server.enable.nmon");
-    } else if (profile == "docker") {
+    } else if (profile == Conts::PROFILE_DOCKER || profile == Conts::PROFILE_K8S) {
         hostsList = getWorkerVector(workerHosts);
     }
 
@@ -312,7 +313,7 @@ void JasmineGraphServer::startRemoteWorkers(std::vector<int> workerPortsVector, 
         artifactPath = utils.getJasmineGraphHome();
     }
 
-    if (profile == "native") {
+    if (profile == Conts::PROFILE_NATIVE) {
         copyArtifactsToWorkers(workerPath, artifactPath, host);
         for (int i = 0; i < workerPortsVector.size(); i++) {
             if (host.find("localhost") != std::string::npos) {
@@ -326,7 +327,7 @@ void JasmineGraphServer::startRemoteWorkers(std::vector<int> workerPortsVector, 
             }
             popen(serverStartScript.c_str(), "r");
         }
-    } else if (profile == "docker") {
+    } else if (profile == Conts::PROFILE_DOCKER) {
         char *env_testing = getenv("TESTING");
         bool is_testing = (env_testing != NULL && strcasecmp(env_testing, "true") == 0);
         for (int i = 0; i < workerPortsVector.size(); i++) {
@@ -390,6 +391,54 @@ void JasmineGraphServer::startRemoteWorkers(std::vector<int> workerPortsVector, 
             }
             server_logger.log(serverStartScript, "info");
             popen(serverStartScript.c_str(), "r");
+        }
+    } else if (profile == Conts::PROFILE_K8S){
+        char *env_testing = getenv("TESTING");
+        bool is_testing = (env_testing != NULL && strcasecmp(env_testing, "true") == 0);
+        for (int i =0 ; i < workerPortsVector.size() ; i++) {
+            std::string worker_logdir = "/tmp/jasminegraph/worker_" + to_string(i);
+            if (access(worker_logdir.c_str(), F_OK) != 0) {
+                if (mkdir(worker_logdir.c_str(), 0777)) {
+                    server_logger.error("Couldn't create worker log dir: " + worker_logdir);
+                }
+            } else {
+                chmod(worker_logdir.c_str(), 0777);
+            }
+            if (is_testing) {
+                serverStartScript = "docker run -p " +
+                                    std::to_string(workerPortsVector.at(i)) + ":" +
+                                    std::to_string(workerPortsVector.at(i)) + " -p " +
+                                    std::to_string(workerDataPortsVector.at(i)) + ":" +
+                                    std::to_string(workerDataPortsVector.at(i)) +
+                                    " -e WORKER_ID=" + to_string(i) +
+                                    " --network=jasminenet" + // TODO: take this as a parameter
+                                    " --ip=" + host +
+                                    " jasminegraph:test --MODE 2 --HOST_NAME " + host +
+                                    " --MASTERIP " + masterHost + " --SERVER_PORT " +
+                                    std::to_string(workerPortsVector.at(i)) + " --SERVER_DATA_PORT " +
+                                    std::to_string(workerDataPortsVector.at(i)) + " --ENABLE_NMON " + enableNmon +
+                                    " >" + worker_logdir + "/worker.log 2>&1";
+            } else {
+                serverStartScript = "docker run -v " + instanceDataFolder + ":" + instanceDataFolder +
+                                    " -v " + aggregateDataFolder + ":" + aggregateDataFolder +
+                                    " -v " + nmonFileLocation + ":" + nmonFileLocation +
+                                    " -v " + graphsagelocation + ":" + graphsagelocation +
+                                    " -v " + instanceDataFolder + "/" + to_string(i) + "/logs" + ":" +
+                                    "/home/ubuntu/software/jasminegraph/logs" + " -p " +
+                                    std::to_string(workerPortsVector.at(i)) + ":" +
+                                    std::to_string(workerPortsVector.at(i)) + " -p " +
+                                    std::to_string(workerDataPortsVector.at(i)) + ":" +
+                                    std::to_string(workerDataPortsVector.at(i)) +
+                                    " -e WORKER_ID=" + to_string(i) +
+                                    " --network=jasminenet" + // TODO: take this as a parameter
+                                    " --ip=" + host +
+                                    " jasminegraph:latest --MODE 2 --HOST_NAME " + host +
+                                    " --MASTERIP " + masterHost + " --SERVER_PORT " +
+                                    std::to_string(workerPortsVector.at(i)) + " --SERVER_DATA_PORT " +
+                                    std::to_string(workerDataPortsVector.at(i)) + " --ENABLE_NMON " + enableNmon;
+            }
+            server_logger.log(serverStartScript, "info");
+            popen(serverStartScript.c_str(),"r");
         }
     }
 }
@@ -2446,9 +2495,9 @@ void JasmineGraphServer::updateOperationalGraphList() {
     string graphIDs = "";
     std::vector<std::string> hostsList;
 
-    if (profile == "native") {
+    if (profile == Conts::PROFILE_NATIVE) {
         hostsList = utils.getHostListFromProperties();
-    } else if (profile == "docker") {
+    } else if (profile == Conts::PROFILE_DOCKER || profile == Conts::PROFILE_K8S) {
         hostsList = getWorkerVector(workerHosts);
     }
     vector<string>::iterator it;
