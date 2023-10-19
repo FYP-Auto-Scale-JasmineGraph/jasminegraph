@@ -35,6 +35,7 @@ static map<string, string> hostIDMap;
 static std::vector<JasmineGraphServer::workers> hostWorkerMap;
 static map<string, pair<int, int>> hostPortMap;
 std::map<int, int> aggregateWeightMap;
+std::atomic<int> workerId(0);
 
 void *runfrontend(void *dummyPt) {
     JasmineGraphServer *refToServer = (JasmineGraphServer *)dummyPt;
@@ -308,6 +309,7 @@ void JasmineGraphServer::startRemoteWorkers(std::vector<int> workerPortsVector, 
     std::string serverStartScript;
     char buffer[128];
     std::string result = "";
+    int returnCode;
 
     if (artifactPath.empty() || artifactPath.find_first_not_of(' ') == artifactPath.npos) {
         artifactPath = utils.getJasmineGraphHome();
@@ -396,7 +398,7 @@ void JasmineGraphServer::startRemoteWorkers(std::vector<int> workerPortsVector, 
         char *env_testing = getenv("TESTING");
         bool is_testing = (env_testing != NULL && strcasecmp(env_testing, "true") == 0);
         for (int i =0 ; i < workerPortsVector.size() ; i++) {
-            std::string worker_logdir = "/tmp/jasminegraph/worker_" + to_string(i);
+            std::string worker_logdir = "/tmp/jasminegraph/worker_" + to_string(workerId);
             if (access(worker_logdir.c_str(), F_OK) != 0) {
                 if (mkdir(worker_logdir.c_str(), 0777)) {
                     server_logger.error("Couldn't create worker log dir: " + worker_logdir);
@@ -410,7 +412,7 @@ void JasmineGraphServer::startRemoteWorkers(std::vector<int> workerPortsVector, 
                                     std::to_string(workerPortsVector.at(i)) + " -p " +
                                     std::to_string(workerDataPortsVector.at(i)) + ":" +
                                     std::to_string(workerDataPortsVector.at(i)) +
-                                    " -e WORKER_ID=" + to_string(i) +
+                                    " -e WORKER_ID=" + to_string(workerId) +
                                     " --network=jasminenet" + // TODO: take this as a parameter
                                     " --ip=" + host +
                                     " jasminegraph:test --MODE 2 --HOST_NAME " + host +
@@ -429,7 +431,7 @@ void JasmineGraphServer::startRemoteWorkers(std::vector<int> workerPortsVector, 
                                     std::to_string(workerPortsVector.at(i)) + " -p " +
                                     std::to_string(workerDataPortsVector.at(i)) + ":" +
                                     std::to_string(workerDataPortsVector.at(i)) +
-                                    " -e WORKER_ID=" + to_string(i) +
+                                    " -e WORKER_ID=" + to_string(workerId) +
                                     " --network=jasminenet" + // TODO: take this as a parameter
                                     " --ip=" + host +
                                     " jasminegraph:latest --MODE 2 --HOST_NAME " + host +
@@ -437,8 +439,12 @@ void JasmineGraphServer::startRemoteWorkers(std::vector<int> workerPortsVector, 
                                     std::to_string(workerPortsVector.at(i)) + " --SERVER_DATA_PORT " +
                                     std::to_string(workerDataPortsVector.at(i)) + " --ENABLE_NMON " + enableNmon;
             }
+            workerId++;
             server_logger.log(serverStartScript, "info");
-            popen(serverStartScript.c_str(),"r");
+            returnCode = std::system(serverStartScript.c_str());
+            if (returnCode != 0) {
+                server_logger.error("Command failed with exit code: " + to_string(returnCode));
+            }
         }
     }
 }
