@@ -368,14 +368,18 @@ void JasmineGraphServer::startRemoteWorkers(std::vector<int> workerPortsVector, 
                 }
             } else {
                 if (is_testing) {
-                    serverStartScript =
-                        "docker -H ssh://" + host + " run -p " + std::to_string(workerPortsVector.at(i)) + ":" +
-                        std::to_string(workerPortsVector.at(i)) + " -p " + std::to_string(workerDataPortsVector.at(i)) +
-                        ":" + std::to_string(workerDataPortsVector.at(i)) + " -e WORKER_ID=" + to_string(i) +
-                        " jasminegraph:test --MODE 2 --HOST_NAME " + host + " --MASTERIP " + masterHost +
-                        " --SERVER_PORT " + std::to_string(workerPortsVector.at(i)) + " --SERVER_DATA_PORT " +
-                        std::to_string(workerDataPortsVector.at(i)) + " --ENABLE_NMON " + enableNmon + " >" +
-                        worker_logdir + "/worker.log 2>&1";
+                    serverStartScript = "docker -H ssh://" + host + " run -p " +
+                                        std::to_string(workerPortsVector.at(i)) + ":" +
+                                        std::to_string(workerPortsVector.at(i)) + " -p " +
+                                        std::to_string(workerDataPortsVector.at(i)) + ":" +
+                                        std::to_string(workerDataPortsVector.at(i)) +
+                                        " -v " + worker_logdir + ":/tmp/jasminegraph" +
+                                        " -e WORKER_ID=" + to_string(i) +
+                                        " jasminegraph:test --MODE 2 --HOST_NAME " + host +
+                                        " --MASTERIP " + masterHost + " --SERVER_PORT " +
+                                        std::to_string(workerPortsVector.at(i)) + " --SERVER_DATA_PORT " +
+                                        std::to_string(workerDataPortsVector.at(i)) + " --ENABLE_NMON " + enableNmon +
+                                        " >" + worker_logdir + "/worker.log 2>&1";
                 } else {
                     serverStartScript =
                         "docker -H ssh://" + host + " run -v " + instanceDataFolder + ":" + instanceDataFolder +
