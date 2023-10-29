@@ -105,13 +105,13 @@ void JasmineGraphServer::start_workers() {
     int numberOfWorkersPerHost;
     std::vector<std::string> hostsList;
     std::string nWorkers;
-    if (profile == "native") {
+    if (profile == Conts::PROFILE_NATIVE) {
         hostsList = Utils::getHostListFromProperties();
         if ((this->numberOfWorkers) == -1) {
             nWorkers = Utils::getJasmineGraphProperty("org.jasminegraph.server.nworkers");
         }
         enableNmon = Utils::getJasmineGraphProperty("org.jasminegraph.server.enable.nmon");
-    } else if (profile == "docker") {
+    } else if (profile == Conts::PROFILE_DOCKER) {
         hostsList = getWorkerVector(workerHosts);
     }
 
@@ -307,7 +307,7 @@ void JasmineGraphServer::startRemoteWorkers(std::vector<int> workerPortsVector, 
         artifactPath = Utils::getJasmineGraphHome();
     }
 
-    if (profile == "native") {
+    if (profile == Conts::PROFILE_NATIVE) {
         copyArtifactsToWorkers(workerPath, artifactPath, host);
         for (int i = 0; i < workerPortsVector.size(); i++) {
             if (host.find("localhost") != std::string::npos) {
@@ -321,7 +321,7 @@ void JasmineGraphServer::startRemoteWorkers(std::vector<int> workerPortsVector, 
             }
             popen(serverStartScript.c_str(), "r");
         }
-    } else if (profile == "docker") {
+    } else if (profile == Conts::PROFILE_DOCKER) {
         char *env_testing = getenv("TESTING");
         bool is_testing = (env_testing != NULL && strcasecmp(env_testing, "true") == 0);
         for (int i = 0; i < workerPortsVector.size(); i++) {
@@ -2434,7 +2434,7 @@ void JasmineGraphServer::updateOperationalGraphList() {
     string graphIDs = "";
     std::vector<std::string> hostsList;
 
-    if (profile == "native") {
+    if (profile == Conts::PROFILE_NATIVE) {
         hostsList = Utils::getHostListFromProperties();
     } else if (profile == "docker") {
         hostsList = getWorkerVector(workerHosts);
