@@ -196,49 +196,59 @@ void JasmineGraphServer::start_workers() {
             ip = splitted[1];
             user = splitted[0];
         }
-        int portCount = 0;
+
         std::string hostID = Utils::getHostID(ip, this->sqlite);
-        std::vector<int> portVector = workerPortsMap[hostName];
-        std::vector<int> dataPortVector = workerDataPortsMap[hostName];
+        if (profile == Conts::PROFILE_DOCKER){
+            int portCount = 0;
+            std::vector<int> portVector = workerPortsMap[hostName];
+            std::vector<int> dataPortVector = workerDataPortsMap[hostName];
 
-        while (portCount < numberOfWorkersPerHost) {
-            portVector.push_back(workerPort);
-            dataPortVector.push_back(workerDataPort);
-            hostWorkerMap.push_back({*it, workerPort, workerDataPort});
-            hostPortMap.insert((pair<string, pair<int, int>>(*it, make_pair(workerPort, workerDataPort))));
-            portCount++;
-            // ToDO: Here for the moment we use host name as the IP address as the third parameter.
-            // ToDO: We also keep user as empty string
+            while (portCount < numberOfWorkersPerHost) {
+                portVector.push_back(workerPort);
+                dataPortVector.push_back(workerDataPort);
+                hostWorkerMap.push_back({*it, workerPort, workerDataPort});
+                hostPortMap.insert((pair<string, pair<int, int>>(*it, make_pair(workerPort, workerDataPort))));
+                portCount++;
+                // ToDO: Here for the moment we use host name as the IP address as the third parameter.
+                // ToDO: We also keep user as empty string
+                string is_public = "false";
+                valuesString += "(" + std::to_string(workerIDCounter) + ", " + hostID + ", \"" + hostName + "\", \"" + ip +
+                                "\",\"" + user + "\", '" + is_public + "',\"" + std::to_string(workerPort) + "\", \"" +
+                                std::to_string(workerDataPort) + "\"),";
+                workerPort = workerPort + 2;
+                workerDataPort = workerDataPort + 2;
+                workerIDCounter++;
+            }
+
+            if (hostListModeNWorkers > 0) {
+                portVector.push_back(workerPort);
+                dataPortVector.push_back(workerDataPort);
+                hostWorkerMap.push_back({*it, workerPort, workerDataPort});
+                hostPortMap.insert(((pair<string, pair<int, int>>(*it, make_pair(workerPort, workerDataPort)))));
+                hostListModeNWorkers--;
+                string is_public = "false";
+                valuesString += "(" + std::to_string(workerIDCounter) + ", " + hostID + ", \"" + hostName + "\", \"" + ip +
+                                "\",\"" + user + "\", '" + is_public + "',\"" + std::to_string(workerPort) + "\", \"" +
+                                std::to_string(workerDataPort) + "\"),";
+                workerPort = workerPort + 2;
+                workerDataPort = workerDataPort + 2;
+                workerIDCounter++;
+            }
+
+            workerPortsMap[hostName] = portVector;
+            workerDataPortsMap[hostName] = dataPortVector;
+
+        } else {
             string is_public = "false";
             valuesString += "(" + std::to_string(workerIDCounter) + ", " + hostID + ", \"" + hostName + "\", \"" + ip +
-                            "\",\"" + user + "\", '" + is_public + "',\"" + std::to_string(workerPort) + "\", \"" +
-                            std::to_string(workerDataPort) + "\"),";
-            workerPort = workerPort + 2;
-            workerDataPort = workerDataPort + 2;
-            workerIDCounter++;
-        }
-
-        if (hostListModeNWorkers > 0) {
-            portVector.push_back(workerPort);
-            dataPortVector.push_back(workerDataPort);
-            hostWorkerMap.push_back({*it, workerPort, workerDataPort});
-            hostPortMap.insert(((pair<string, pair<int, int>>(*it, make_pair(workerPort, workerDataPort)))));
-            hostListModeNWorkers--;
-            string is_public = "false";
-            valuesString += "(" + std::to_string(workerIDCounter) + ", " + hostID + ", \"" + hostName + "\", \"" + ip +
-                            "\",\"" + user + "\", '" + is_public + "',\"" + std::to_string(workerPort) + "\", \"" +
-                            std::to_string(workerDataPort) + "\"),";
-            workerPort = workerPort + 2;
-            workerDataPort = workerDataPort + 2;
+                                "\",\"" + user + "\", '" + is_public + "',\"" + std::to_string(Conts::JASMINEGRAPH_FRONTEND_PORT) + "\", \"" +
+                                std::to_string(Conts::JASMINEGRAPH_BACKEND_PORT) + "\"),";
             workerIDCounter++;
         }
 
         valuesString = valuesString.substr(0, valuesString.length() - 1);
         sqlStatement = sqlStatement + valuesString;
         this->sqlite.runInsert(sqlStatement);
-
-        workerPortsMap[hostName] = portVector;
-        workerDataPortsMap[hostName] = dataPortVector;
     }
 
     Utils::assignPartitionsToWorkers(numberOfWorkers, this->sqlite);
@@ -412,17 +422,17 @@ void JasmineGraphServer::startRemoteWorkers(std::vector<int> workerPortsVector, 
             }
             if (is_testing) {
                 serverStartScript = "docker run -p " +
-                                    std::to_string(workerPortsVector.at(i)) + ":" +
-                                    std::to_string(workerPortsVector.at(i)) + " -p " +
-                                    std::to_string(workerDataPortsVector.at(i)) + ":" +
-                                    std::to_string(workerDataPortsVector.at(i)) +
+                                    std::to_string(Conts::JASMINEGRAPH_FRONTEND_PORT) + ":" +
+                                    std::to_string(Conts::JASMINEGRAPH_FRONTEND_PORT) + " -p " +
+                                    std::to_string(Conts::JASMINEGRAPH_BACKEND_PORT) + ":" +
+                                    std::to_string(Conts::JASMINEGRAPH_BACKEND_PORT) +
                                     " -e WORKER_ID=" + to_string(workerId) +
                                     " --network=jasminenet" + // TODO: take this as a parameter
                                     " --ip=" + host +
                                     " jasminegraph:test --MODE 2 --HOST_NAME " + host +
                                     " --MASTERIP " + masterHost + " --SERVER_PORT " +
-                                    std::to_string(workerPortsVector.at(i)) + " --SERVER_DATA_PORT " +
-                                    std::to_string(workerDataPortsVector.at(i)) + " --ENABLE_NMON " + enableNmon +
+                                    std::to_string(Conts::JASMINEGRAPH_FRONTEND_PORT) + " --SERVER_DATA_PORT " +
+                                    std::to_string(Conts::JASMINEGRAPH_BACKEND_PORT) + " --ENABLE_NMON " + enableNmon +
                                     " >" + worker_logdir + "/worker.log 2>&1";
             } else {
                 serverStartScript = "docker run -v " + instanceDataFolder + ":" + instanceDataFolder +
@@ -431,17 +441,17 @@ void JasmineGraphServer::startRemoteWorkers(std::vector<int> workerPortsVector, 
                                     " -v " + graphsagelocation + ":" + graphsagelocation +
                                     " -v " + instanceDataFolder + "/" + to_string(i) + "/logs" + ":" +
                                     "/home/ubuntu/software/jasminegraph/logs" + " -p " +
-                                    std::to_string(workerPortsVector.at(i)) + ":" +
-                                    std::to_string(workerPortsVector.at(i)) + " -p " +
-                                    std::to_string(workerDataPortsVector.at(i)) + ":" +
-                                    std::to_string(workerDataPortsVector.at(i)) +
+                                    std::to_string(Conts::JASMINEGRAPH_FRONTEND_PORT) + ":" +
+                                    std::to_string(Conts::JASMINEGRAPH_FRONTEND_PORT) + " -p " +
+                                    std::to_string(Conts::JASMINEGRAPH_BACKEND_PORT) + ":" +
+                                    std::to_string(Conts::JASMINEGRAPH_BACKEND_PORT) +
                                     " -e WORKER_ID=" + to_string(workerId) +
                                     " --network=jasminenet" + // TODO: take this as a parameter
                                     " --ip=" + host +
                                     " jasminegraph:latest --MODE 2 --HOST_NAME " + host +
                                     " --MASTERIP " + masterHost + " --SERVER_PORT " +
-                                    std::to_string(workerPortsVector.at(i)) + " --SERVER_DATA_PORT " +
-                                    std::to_string(workerDataPortsVector.at(i)) + " --ENABLE_NMON " + enableNmon;
+                                    std::to_string(Conts::JASMINEGRAPH_FRONTEND_PORT) + " --SERVER_DATA_PORT " +
+                                    std::to_string(Conts::JASMINEGRAPH_BACKEND_PORT) + " --ENABLE_NMON " + enableNmon;
             }
             workerId++;
             server_logger.log(serverStartScript, "info");
