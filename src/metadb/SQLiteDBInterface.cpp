@@ -11,30 +11,84 @@ See the License for the specific language governing permissions and
 limitations under the License.
  */
 
-#include "SQLiteDBInterface.h"
-
 #include <string>
+#include <fstream>
+#include <sstream>
+#include <filesystem>
+
+#include "SQLiteDBInterface.h"
 
 #include "../util/Utils.h"
 #include "../util/logger/Logger.h"
 
 using namespace std;
 Logger db_logger;
+const char* dbLocation;
+
+string readDDLFile(const string& fileName) {
+    if (!Utils::fileExists(fileName)) {
+        db_logger.error("DDL file not found: " + fileName);
+        return "";
+    }
+    ifstream ddlFile(fileName);
+
+    stringstream buffer;
+    buffer << ddlFile.rdbuf();
+    ddlFile.close();
+
+    return buffer.str();
+}
+
+int createDatabase(const char* dbLocation) {
+    sqlite3* tempDatabase;
+    int rc = sqlite3_open(dbLocation, &tempDatabase);
+    if (rc) {
+        db_logger.error("Cannot create database: " + string(sqlite3_errmsg(tempDatabase)));
+        return -1;
+    }
+
+    // Execute DDL statements to create tables and schema
+    rc = sqlite3_exec(tempDatabase, readDDLFile("src/metadb/ddl.sql").c_str(), 0, 0, 0);
+    std::ofstream logFile("ddl_content.log");
+    logFile << readDDLFile("src/metadb/ddl.sql").c_str();
+    if (rc) {
+        db_logger.error("DDL execution failed: " + string(sqlite3_errmsg(tempDatabase)));
+        sqlite3_close(tempDatabase);
+        return -1;
+    }
+
+    // Close the temporary database
+    sqlite3_close(tempDatabase);
+    db_logger.info("Database created successfully");
+
+    return 0;
+}
 
 int SQLiteDBInterface::init() {
-    int rc = sqlite3_open(Utils::getJasmineGraphProperty("org.jasminegraph.db.location").c_str(), &database);
+    // Check if the SQLite database file exists
+    if (!Utils::fileExists(dbLocation)) {
+        // File does not exist, create the database
+        if (createDatabase(dbLocation) != 0) {
+            return -1;  // Error creating the database
+        }
+    }
+
+    // Try to open the SQLite database
+    int rc = sqlite3_open(dbLocation, &database);
     if (rc) {
-        db_logger.log("Cannot open database: " + string(sqlite3_errmsg(database)), "error");
-        return (-1);
+        db_logger.error("Cannot open database: " + string(sqlite3_errmsg(database)));
+        return -1;
     } else {
-        db_logger.log("Database opened successfully", "info");
+        db_logger.info("Database opened successfully");
         return 0;
     }
 }
 
 int SQLiteDBInterface::finalize() { return sqlite3_close(database); }
 
-SQLiteDBInterface::SQLiteDBInterface() {}
+SQLiteDBInterface::SQLiteDBInterface() {
+    dbLocation = Utils::getJasmineGraphProperty("org.jasminegraph.db.location").c_str();
+}
 
 typedef vector<vector<pair<string, string>>> table_type;
 
