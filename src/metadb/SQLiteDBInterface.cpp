@@ -23,7 +23,7 @@ limitations under the License.
 
 using namespace std;
 Logger db_logger;
-const char* dbLocation;
+string dbLocation;
 
 string readDDLFile(const string& fileName) {
     if (!Utils::fileExists(fileName)) {
@@ -39,16 +39,16 @@ string readDDLFile(const string& fileName) {
     return buffer.str();
 }
 
-int createDatabase(const char* dbLocation) {
+int createDatabase() {
     sqlite3* tempDatabase;
-    int rc = sqlite3_open(dbLocation, &tempDatabase);
+    int rc = sqlite3_open(dbLocation.c_str(), &tempDatabase);
     if (rc) {
         db_logger.error("Cannot create database: " + string(sqlite3_errmsg(tempDatabase)));
         return -1;
     }
 
     // Execute DDL statements to create tables and schema
-    rc = sqlite3_exec(tempDatabase, readDDLFile("src/metadb/ddl.sql").c_str(), 0, 0, 0);
+    rc = sqlite3_exec(tempDatabase, readDDLFile("src/metadb/ddl.sql").c_str(), nullptr, nullptr, nullptr);
     std::ofstream logFile("ddl_content.log");
     logFile << readDDLFile("src/metadb/ddl.sql").c_str();
     if (rc) {
@@ -65,16 +65,13 @@ int createDatabase(const char* dbLocation) {
 }
 
 int SQLiteDBInterface::init() {
-    // Check if the SQLite database file exists
-    if (!Utils::fileExists(dbLocation)) {
-        // File does not exist, create the database
-        if (createDatabase(dbLocation) != 0) {
-            return -1;  // Error creating the database
-        }
+    // Check if the SQLite database file exists and create if not exist
+    if (!Utils::fileExists(dbLocation) || createDatabase() != 0) {
+        return -1;  // Error creating the database
     }
 
     // Try to open the SQLite database
-    int rc = sqlite3_open(dbLocation, &database);
+    int rc = sqlite3_open(dbLocation.c_str(), &database);
     if (rc) {
         db_logger.error("Cannot open database: " + string(sqlite3_errmsg(database)));
         return -1;
@@ -87,7 +84,7 @@ int SQLiteDBInterface::init() {
 int SQLiteDBInterface::finalize() { return sqlite3_close(database); }
 
 SQLiteDBInterface::SQLiteDBInterface() {
-    dbLocation = Utils::getJasmineGraphProperty("org.jasminegraph.db.location").c_str();
+    dbLocation = Utils::getJasmineGraphProperty("org.jasminegraph.db.location");
 }
 
 typedef vector<vector<pair<string, string>>> table_type;
@@ -115,10 +112,8 @@ vector<vector<pair<string, string>>> SQLiteDBInterface::runSelect(std::string qu
     if (rc != SQLITE_OK) {
         db_logger.log("SQL Error: " + string(zErrMsg) + " " + query, "error");
         sqlite3_free(zErrMsg);
-    } else {
-        db_logger.log("Operation done successfully", "info");
-        return dbResults;
     }
+    return dbResults;
 }
 
 // This function inserts a new row to the DB and returns the last inserted row id
