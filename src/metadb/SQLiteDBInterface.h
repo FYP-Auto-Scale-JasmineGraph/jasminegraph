@@ -22,7 +22,9 @@ limitations under the License.
 
 class SQLiteDBInterface {
  private:
-    sqlite3 *database;
+    sqlite3 *database{};
+    std::string readDDLFile(const std::string& fileName);
+    int createDatabase();
 
  public:
     int init();

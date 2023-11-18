@@ -25,49 +25,13 @@ using namespace std;
 Logger db_logger;
 string dbLocation;
 
-string readDDLFile(const string& fileName) {
-    if (!Utils::fileExists(fileName)) {
-        db_logger.error("DDL file not found: " + fileName);
-        return "";
-    }
-    ifstream ddlFile(fileName);
-
-    stringstream buffer;
-    buffer << ddlFile.rdbuf();
-    ddlFile.close();
-
-    return buffer.str();
-}
-
-int createDatabase() {
-    sqlite3* tempDatabase;
-    int rc = sqlite3_open(dbLocation.c_str(), &tempDatabase);
-    if (rc) {
-        db_logger.error("Cannot create database: " + string(sqlite3_errmsg(tempDatabase)));
-        return -1;
-    }
-
-    // Execute DDL statements to create tables and schema
-    rc = sqlite3_exec(tempDatabase, readDDLFile("src/metadb/ddl.sql").c_str(), nullptr, nullptr, nullptr);
-    std::ofstream logFile("ddl_content.log");
-    logFile << readDDLFile("src/metadb/ddl.sql").c_str();
-    if (rc) {
-        db_logger.error("DDL execution failed: " + string(sqlite3_errmsg(tempDatabase)));
-        sqlite3_close(tempDatabase);
-        return -1;
-    }
-
-    // Close the temporary database
-    sqlite3_close(tempDatabase);
-    db_logger.info("Database created successfully");
-
-    return 0;
-}
-
 int SQLiteDBInterface::init() {
     // Check if the SQLite database file exists and create if not exist
-    if (!Utils::fileExists(dbLocation) || createDatabase() != 0) {
-        return -1;  // Error creating the database
+    bool dbExist = Utils::fileExists(dbLocation);
+    if (!dbExist) {
+        if (createDatabase() != 0) {
+            return -1;
+        }
     }
 
     // Try to open the SQLite database
@@ -206,4 +170,43 @@ int SQLiteDBInterface::RunSqlNoCallback(const char *zSql) {
     rc = sqlite3_finalize(stmt);
 
     return rc;
+}
+
+std::string SQLiteDBInterface::readDDLFile(const string &fileName) {
+    if (!Utils::fileExists(fileName)) {
+        db_logger.error("DDL file not found: " + fileName);
+        return "";
+    }
+    ifstream ddlFile(fileName);
+
+    stringstream buffer;
+    buffer << ddlFile.rdbuf();
+    ddlFile.close();
+
+    return buffer.str();
+}
+
+int SQLiteDBInterface::createDatabase() {
+    sqlite3* tempDatabase;
+    int rc = sqlite3_open(dbLocation.c_str(), &tempDatabase);
+    if (rc) {
+        db_logger.error("Cannot create database: " + string(sqlite3_errmsg(tempDatabase)));
+        return -1;
+    }
+
+    // Execute DDL statements to create tables and schema
+    rc = sqlite3_exec(tempDatabase, readDDLFile("src/metadb/ddl.sql").c_str(), nullptr, nullptr, nullptr);
+    std::ofstream logFile("ddl_content.log");
+    logFile << readDDLFile("src/metadb/ddl.sql").c_str();
+    if (rc) {
+        db_logger.error("DDL execution failed: " + string(sqlite3_errmsg(tempDatabase)));
+        sqlite3_close(tempDatabase);
+        return -1;
+    }
+
+    // Close the temporary database
+    sqlite3_close(tempDatabase);
+    db_logger.info("Database created successfully");
+
+    return 0;
 }
