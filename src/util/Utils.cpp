@@ -385,29 +385,21 @@ void Utils::assignPartitionsToWorkers(int numberOfWorkers, SQLiteDBInterface sql
 
     std::vector<vector<pair<string, string>>> v = sqlite.runSelect("SELECT idpartition, graph_idgraph FROM partition;");
     int workerCounter = 0;
-    string valueString;
-    string sqlStatement =
-        "INSERT INTO worker_has_partition (partition_idpartition, partition_graph_idgraph, worker_idworker) VALUES ";
-    std::stringstream ss;
+
     if (v.size() > 0) {
         for (std::vector<vector<pair<string, string>>>::iterator i = v.begin(); i != v.end(); ++i) {
-            int counter = 0;
-            ss << "(";
+            auto* workerPartitionData = new SQLiteDBInterface::worker_has_partition();
             for (std::vector<pair<string, string>>::iterator j = (i->begin()); j != i->end(); ++j) {
-                ss << j->second << ",";
+                workerPartitionData->partition_idpartition = atoi(j->second.c_str());
             }
 
-            ss << workerCounter << "),";
-            valueString = valueString + ss.str();
-            ss.str(std::string());
-            workerCounter++;
+            workerPartitionData->worker_idworker = workerCounter++;
+            sqlite.insertWorkerHasPartition(workerPartitionData);
+
             if (workerCounter >= numberOfWorkers) {
                 workerCounter = 0;
             }
         }
-        valueString = valueString.substr(0, valueString.length() - 1);
-        sqlStatement = sqlStatement + valueString;
-        sqlite.runInsert(sqlStatement);
     }
 }
 

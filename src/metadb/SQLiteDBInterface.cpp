@@ -234,3 +234,12 @@ int SQLiteDBInterface::insertWorker(SQLiteDBInterface::worker *data) {
             to_string(data->server_data_port) + ")";
     return this->runInsert(sql);
 }
+
+int SQLiteDBInterface::insertWorkerHasPartition(SQLiteDBInterface::worker_has_partition *data) {
+    std::string sql = "insert into worker_has_partition "
+                      "(partition_idpartition, partition_graph_idgraph, worker_idworker) values (" +
+            to_string(data->partition_idpartition) + ", " +
+            to_string(data->partition_graph_idgraph) + ", " +
+            to_string(data->worker_idworker) + ")";
+    return this->runInsert(sql);
+}

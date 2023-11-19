@@ -107,6 +107,7 @@ class SQLiteDBInterface {
 
     int insertHost(host* data);
     int insertWorker(worker* data);
+    int insertWorkerHasPartition(worker_has_partition* data);
 };
 
 #endif  // JASMINEGRAPH_SQLITEDBINTERFACE_H

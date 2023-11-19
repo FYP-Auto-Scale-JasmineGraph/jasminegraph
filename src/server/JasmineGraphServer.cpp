@@ -833,10 +833,11 @@ void JasmineGraphServer::uploadGraphLocally(int graphID, const string graphType,
 void JasmineGraphServer::assignPartitionToWorker(std::string fileName, int graphId, std::string workerHost,
                                                  int workerPort, int workerDataPort) {
     SQLiteDBInterface refToSqlite = *new SQLiteDBInterface();
+    auto* workerPartitionData = new SQLiteDBInterface::worker_has_partition();
     refToSqlite.init();
     size_t lastindex = fileName.find_last_of(".");
     string rawname = fileName.substr(0, lastindex);
-    string partitionID = rawname.substr(rawname.find_last_of("_") + 1);
+    workerPartitionData->partition_idpartition = atoi(rawname.substr(rawname.find_last_of("_") + 1).c_str());
 
     if (workerHost.find('@') != std::string::npos) {
         workerHost = Utils::split(workerHost, '@')[1];
@@ -848,14 +849,10 @@ void JasmineGraphServer::assignPartitionToWorker(std::string fileName, int graph
 
     std::vector<vector<pair<string, string>>> results = refToSqlite.runSelect(workerSearchQuery);
 
-    std::string workerID = results[0][0].second;
+    workerPartitionData->partition_graph_idgraph = graphId;
+    workerPartitionData->worker_idworker = atoi(results[0][0].second.c_str());
 
-    std::string partitionToWorkerQuery =
-        "insert into worker_has_partition (partition_idpartition, partition_graph_idgraph, worker_idworker) values "
-        "('" +
-        partitionID + "','" + std::to_string(graphId) + "','" + workerID + "')";
-
-    refToSqlite.runInsert(partitionToWorkerQuery);
+    refToSqlite.insertWorkerHasPartition(workerPartitionData);
 }
 
 bool JasmineGraphServer::batchUploadFile(std::string host, int port, int dataPort, int graphID, std::string filePath,
