@@ -139,13 +139,16 @@ void JasmineGraphServer::start_workers() {
         } else {
             ip_address = hostItem;
         }
-        hostString += "(" + std::to_string(counter) + ", '" + ip_address + "', '" + ip_address + "', 'false'),";
+
+        auto* hostData = new SQLiteDBInterface::host();
+        hostData->idhost = counter;
+        hostData->name = ip_address;
+        hostData->ip = ip_address;
+
+        sqlite.insertHost(hostData);
         counter++;
     }
 
-    hostString = hostString.substr(0, hostString.length() - 1);
-    sqlString = sqlString + hostString;
-    this->sqlite.runInsert(sqlString);
 
     int workerPort = Conts::JASMINEGRAPH_INSTANCE_PORT;
     int workerDataPort = Conts::JASMINEGRAPH_INSTANCE_DATA_PORT;

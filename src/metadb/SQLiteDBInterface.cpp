@@ -210,3 +210,13 @@ int SQLiteDBInterface::createDatabase() {
 
     return 0;
 }
+
+int SQLiteDBInterface::insertHost(struct SQLiteDBInterface::host* data) {
+    std::string sql = "INSERT INTO host (idhost,name,ip,is_public) VALUES (" +
+    to_string(data->idhost) + ", \"" +
+    data->name + "\", \"" +
+    data->ip + "\", \"" +
+    data->is_public + "\")";
+
+    return this->runInsert(sql);
+}

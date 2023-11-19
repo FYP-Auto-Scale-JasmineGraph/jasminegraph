@@ -20,6 +20,8 @@ limitations under the License.
 #include <string>
 #include <vector>
 
+#include "../util/Conts.h"
+
 class SQLiteDBInterface {
  private:
     sqlite3 *database{};
@@ -42,6 +44,67 @@ class SQLiteDBInterface {
     int RunSqlNoCallback(const char *zSql);
 
     SQLiteDBInterface();
+
+    struct host {
+        int idhost;
+        std::string name;
+        std::string ip;
+        std::string is_public;
+
+        host() {
+            is_public = "false";
+        }
+    };
+
+    struct worker {
+        int host_idhost;
+        std::string name;
+        std::string ip;
+        std::string user;
+        std::string is_public;
+        int server_port;
+        int server_data_port;
+
+        worker() {
+            user = "";
+            is_public = "false";
+            server_port = Conts::JASMINEGRAPH_BACKEND_PORT;
+            server_data_port = Conts::JASMINEGRAPH_BACKEND_PORT;
+        }
+    };
+
+    struct worker_has_partition {
+        int partition_idpartition;
+        int partition_graph_idgraph;
+        int worker_idworker;
+    };
+
+    struct graph {
+        std::string name;
+        std::string upload_path;
+        std::string upload_start_time;
+        std::string upload_end_time;
+        std::string graph_status_idgraph_status;
+        int vertexcount;
+        int centralpartitioncount;
+        int edgecount;
+
+        graph() {
+            upload_end_time = "";
+            vertexcount = 0;
+            centralpartitioncount = 0;
+            edgecount = 0;
+        }
+    };
+
+    struct model {
+        std::string name;
+        std::string upload_path;
+        std::string upload_time;
+        std::string model_status_idmodel_status;
+    };
+
+    int insertHost(host* data);
 };
 
 #endif  // JASMINEGRAPH_SQLITEDBINTERFACE_H
