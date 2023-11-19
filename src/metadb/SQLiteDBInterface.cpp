@@ -220,3 +220,17 @@ int SQLiteDBInterface::insertHost(struct SQLiteDBInterface::host* data) {
 
     return this->runInsert(sql);
 }
+
+int SQLiteDBInterface::insertWorker(SQLiteDBInterface::worker *data) {
+    std::string sql = "INSERT INTO worker (idworker,host_idhost,name,ip,user,is_public,server_port,server_data_port)"
+            " VALUES (" +
+            to_string(data-> idworker) + ", " +
+            to_string(data->host_idhost) + ", " +
+            "\"" + data->name + "\", " +
+            "\"" + data->ip + "\", " +
+            "\"" + data->user + "\", " +
+            "\"" + data->is_public + "\", " +
+            to_string(data->server_port) + ", " +
+            to_string(data->server_data_port) + ")";
+    return this->runInsert(sql);
+}

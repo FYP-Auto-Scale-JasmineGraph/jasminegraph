@@ -124,26 +124,21 @@ void JasmineGraphServer::start_workers() {
 
     std::vector<std::string>::iterator it;
     it = hostsList.begin();
-    std::string hostString = "";
-    std::string sqlString = "INSERT INTO host (idhost,name,ip,is_public) VALUES ";
     int counter = 0;
 
     for (it = hostsList.begin(); it < hostsList.end(); it++) {
         std::string hostItem = (*it);
-        std::string ip_address = "";
-        std::string user = "";
+        auto* hostData = new SQLiteDBInterface::host();
+
         if (hostItem.find('@') != std::string::npos) {
             vector<string> splitted = Utils::split(hostItem, '@');
-            ip_address = splitted[1];
-            user = splitted[0];
+            hostData->ip = splitted[1];
+            hostData->name = splitted[1];
         } else {
-            ip_address = hostItem;
+            hostData->ip = hostItem;
+            hostData->name = hostItem;
         }
-
-        auto* hostData = new SQLiteDBInterface::host();
-        hostData->idhost = counter;
-        hostData->name = ip_address;
-        hostData->ip = ip_address;
+        hostData->idhost = counter++;
 
         sqlite.insertHost(hostData);
         counter++;
@@ -182,9 +177,7 @@ void JasmineGraphServer::start_workers() {
     it = hostsList.begin();
 
     for (it = hostsList.begin(); it < hostsList.end(); it++) {
-        string sqlStatement =
-            "INSERT INTO worker (idworker,host_idhost,name,ip,user,is_public,server_port,server_data_port) VALUES ";
-        string valuesString;
+        auto* workerData = new SQLiteDBInterface::worker();
         std::string hostName = *it;
         string user = "";
         string ip = hostName;
@@ -204,15 +197,18 @@ void JasmineGraphServer::start_workers() {
             hostWorkerMap.push_back({*it, workerPort, workerDataPort});
             hostPortMap.insert((pair<string, pair<int, int>>(*it, make_pair(workerPort, workerDataPort))));
             portCount++;
-            // ToDO: Here for the moment we use host name as the IP address as the third parameter.
-            // ToDO: We also keep user as empty string
-            string is_public = "false";
-            valuesString += "(" + std::to_string(workerIDCounter) + ", " + hostID + ", \"" + hostName + "\", \"" + ip +
-                            "\",\"" + user + "\", '" + is_public + "',\"" + std::to_string(workerPort) + "\", \"" +
-                            std::to_string(workerDataPort) + "\"),";
+
+            workerData->idworker = workerIDCounter++;
+            workerData->host_idhost = atoi(hostID.c_str());
+            workerData->name = hostName;
+            workerData->ip = ip;
+            workerData->user = user;
+            workerData->server_port = workerPort;
+            workerData->server_data_port = workerDataPort;
+            this->sqlite.insertWorker(workerData);
+
             workerPort = workerPort + 2;
             workerDataPort = workerDataPort + 2;
-            workerIDCounter++;
         }
 
         if (hostListModeNWorkers > 0) {
@@ -221,18 +217,19 @@ void JasmineGraphServer::start_workers() {
             hostWorkerMap.push_back({*it, workerPort, workerDataPort});
             hostPortMap.insert(((pair<string, pair<int, int>>(*it, make_pair(workerPort, workerDataPort)))));
             hostListModeNWorkers--;
-            string is_public = "false";
-            valuesString += "(" + std::to_string(workerIDCounter) + ", " + hostID + ", \"" + hostName + "\", \"" + ip +
-                            "\",\"" + user + "\", '" + is_public + "',\"" + std::to_string(workerPort) + "\", \"" +
-                            std::to_string(workerDataPort) + "\"),";
+            auto* workerData = new SQLiteDBInterface::worker();
+            workerData->idworker = workerIDCounter++;
+            workerData->host_idhost = atoi(hostID.c_str());
+            workerData->name = hostName;
+            workerData->ip = ip;
+            workerData->user = user;
+            workerData->server_port = workerPort;
+            workerData->server_data_port = workerDataPort;
+            this->sqlite.insertWorker(workerData);
+
             workerPort = workerPort + 2;
             workerDataPort = workerDataPort + 2;
-            workerIDCounter++;
         }
-
-        valuesString = valuesString.substr(0, valuesString.length() - 1);
-        sqlStatement = sqlStatement + valuesString;
-        this->sqlite.runInsert(sqlStatement);
 
         workerPortsMap[hostName] = portVector;
         workerDataPortsMap[hostName] = dataPortVector;
@@ -404,42 +401,40 @@ bool JasmineGraphServer::spawnNewWorker(string host, string port, string dataPor
     }
 
     std::vector<vector<pair<string, string>>> selectHostOutput = refToSqlite.runSelect(selectHostSQL);
-    string idHost = "";
+    auto* hostData = new SQLiteDBInterface::host();
 
     if (selectHostOutput.size() > 0) {
-        idHost = selectHostOutput[0][0].second;
+        hostData->idhost = atoi(selectHostOutput[0][0].second.c_str());
     } else {
         string maxHostIDSQL = "select max(idhost) from host";
         std::vector<vector<pair<string, string>>> selectMaxHostOutput = refToSqlite.runSelect(maxHostIDSQL);
-        idHost = selectMaxHostOutput[0][0].second;
+        hostData->idhost = atoi(selectMaxHostOutput[0][0].second.c_str()) + 1;
 
-        int hostId = atoi(idHost.c_str());
-        hostId++;
-        std::string hostInsertString = "INSERT INTO host (idhost,name,ip,is_public) VALUES ('" +
-                                       std::to_string(hostId) + "','" + host + "','" + host + "','false')";
-
-        refToSqlite.runInsert(hostInsertString);
-
-        idHost = to_string(hostId);
+        hostData->name = host;
+        hostData->ip = host;
+        refToSqlite.insertHost(hostData);
     }
 
     string maxWorkerIDSQL = "select max(idworker) from worker";
     std::vector<vector<pair<string, string>>> selectMaxWorkerIdOutput = refToSqlite.runSelect(maxWorkerIDSQL);
     string maxIdWorker = selectMaxWorkerIdOutput[0][0].second;
     int maxWorkerId = atoi(maxIdWorker.c_str());
-    maxWorkerId++;
-    string workerInsertSqlStatement =
-        "INSERT INTO worker (idworker,host_idhost,name,ip,user,is_public,server_port,server_data_port) VALUES ('" +
-        to_string(maxWorkerId) + "','" + idHost + "','" + host + "','" + host + "','','false','" + port + "','" +
-        dataPort + "')";
 
-    refToSqlite.runInsert(workerInsertSqlStatement);
+    auto* workerData = new SQLiteDBInterface::worker();
+    workerData->idworker = maxWorkerId++;
+    workerData->host_idhost = hostData->idhost;
+    workerData->name = host;
+    workerData->ip = host;
+    workerData->server_port = atoi(port.c_str());
+    workerData->server_data_port = atoi(dataPort.c_str());
+
+    refToSqlite.insertWorker(workerData);
 
     std::vector<int> workerPortsVector;
     std::vector<int> workerDataPortsVector;
 
-    workerPortsVector.push_back(atoi(port.c_str()));
-    workerDataPortsVector.push_back(atoi(dataPort.c_str()));
+    workerPortsVector.push_back(workerData->server_port);
+    workerDataPortsVector.push_back(workerData->server_data_port);
 
     JasmineGraphServer::startRemoteWorkers(workerPortsVector, workerDataPortsVector, host, profile, masterHost,
                                            enableNmon);

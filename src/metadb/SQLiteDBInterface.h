@@ -57,6 +57,7 @@ class SQLiteDBInterface {
     };
 
     struct worker {
+        int idworker;
         int host_idhost;
         std::string name;
         std::string ip;
@@ -105,6 +106,7 @@ class SQLiteDBInterface {
     };
 
     int insertHost(host* data);
+    int insertWorker(worker* data);
 };
 
 #endif  // JASMINEGRAPH_SQLITEDBINTERFACE_H
