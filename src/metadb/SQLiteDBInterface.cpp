@@ -257,3 +257,12 @@ int SQLiteDBInterface::insertGraph(SQLiteDBInterface::graph *data) {
                     to_string(data->edgecount) + ")";
     return this->runInsert(sql);
 }
+
+int SQLiteDBInterface::insertModel(SQLiteDBInterface::model *data) {
+    std::string sql = "INSERT INTO model (name,upload_path,upload_time,model_status_idmodel_status) VALUES (\"" +
+                      data->name + "\", \"" +
+                      data->upload_path + "\", \"" +
+                      data->upload_time + "\", " +
+                      to_string(data->model_status_idmodel_status) +")";
+    return this->runInsert(sql);
+}

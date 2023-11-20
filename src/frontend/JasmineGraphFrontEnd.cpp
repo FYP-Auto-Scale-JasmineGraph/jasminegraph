@@ -1062,7 +1062,6 @@ static void remove_graph_command(std::string masterIP, int connFd, SQLiteDBInter
 }
 
 static void add_model_command(int connFd, SQLiteDBInterface sqlite, bool *loop_exit_p) {
-    // TODO add error handling
     int result_wr = write(connFd, SEND.c_str(), FRONTEND_COMMAND_LENGTH);
     if (result_wr < 0) {
         frontend_logger.error("Error writing to socket");
@@ -1078,13 +1077,12 @@ static void add_model_command(int connFd, SQLiteDBInterface sqlite, bool *loop_e
 
     char graph_data[FRONTEND_DATA_LENGTH + 1];
     bzero(graph_data, FRONTEND_DATA_LENGTH + 1);
-    string name = "";
-    string path = "";
+    auto* modelData = new SQLiteDBInterface::model();
 
     read(connFd, graph_data, FRONTEND_DATA_LENGTH);
 
     std::time_t time = chrono::system_clock::to_time_t(chrono::system_clock::now());
-    string uploadStartTime = ctime(&time);
+    modelData->upload_time = ctime(&time);
     string gData(graph_data);
 
     gData = Utils::trim_copy(gData, " \f\n\r\t\v");
@@ -1098,27 +1096,22 @@ static void add_model_command(int connFd, SQLiteDBInterface sqlite, bool *loop_e
         return;
     }
 
-    name = strArr[0];
-    path = strArr[1];
+    modelData->name = strArr[0];
+    modelData->upload_path = strArr[1];
+    modelData->model_status_idmodel_status = Conts::GRAPH_STATUS::LOADING;
 
-    if (JasmineGraphFrontEnd::modelExists(path, sqlite)) {
+    if (JasmineGraphFrontEnd::modelExists(modelData->upload_path, sqlite)) {
         frontend_logger.error("Model exists");
         // TODO: inform client?
         return;
     }
 
-    if (Utils::fileExists(path)) {
+    if (Utils::fileExists(modelData->upload_path)) {
         frontend_logger.info("Path exists");
         std::string toDir = Utils::getJasmineGraphProperty("org.jasminegraph.server.modelDir");
-        Utils::copyToDirectory(path, toDir);
+        Utils::copyToDirectory(modelData->upload_path, toDir);
 
-        string sqlStatement =
-            "INSERT INTO model (name,upload_path,upload_time,model_status_idmodel_status"
-            ")VALUES(\"" +
-            name + "\", \"" + path + "\", \"" + uploadStartTime + "\",\"" + to_string(Conts::GRAPH_STATUS::LOADING) +
-            "\")";
-
-        int newModelID = sqlite.runInsert(sqlStatement);
+        int newModelID = sqlite.insertModel(modelData);
 
         frontend_logger.info("Upload done");
         result_wr = write(connFd, DONE.c_str(), DONE.size());

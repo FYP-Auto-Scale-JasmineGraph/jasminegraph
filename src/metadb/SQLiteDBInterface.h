@@ -102,13 +102,14 @@ class SQLiteDBInterface {
         std::string name;
         std::string upload_path;
         std::string upload_time;
-        std::string model_status_idmodel_status;
+        int model_status_idmodel_status;
     };
 
     int insertHost(host* data);
     int insertWorker(worker* data);
     int insertWorkerHasPartition(worker_has_partition* data);
     int insertGraph(graph* data);
+    int insertModel(model* data);
 };
 
 #endif  // JASMINEGRAPH_SQLITEDBINTERFACE_H
