@@ -2113,7 +2113,8 @@ void JasmineGraphServer::addHostsToMetaDB(std::string host, std::vector<int> por
         workerData->server_port = portVector.at(i);
         workerData->server_data_port = dataPortVector.at(i);
 
-        if (!Utils::hostExists(workerData->name, workerData->ip, std::to_string(workerData->server_port), this->sqlite)) {
+        if (!Utils::hostExists(workerData->name, workerData->ip, std::to_string(workerData->server_port),
+                               this->sqlite)) {
             workerData->idworker = atoi(Utils::getHostID(workerData->name, this->sqlite).c_str());
             this->sqlite.insertWorker(workerData);
         }
