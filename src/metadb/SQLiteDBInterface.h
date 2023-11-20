@@ -85,7 +85,7 @@ class SQLiteDBInterface {
         std::string upload_path;
         std::string upload_start_time;
         std::string upload_end_time;
-        std::string graph_status_idgraph_status;
+        int graph_status_idgraph_status;
         int vertexcount;
         int centralpartitioncount;
         int edgecount;
@@ -108,6 +108,7 @@ class SQLiteDBInterface {
     int insertHost(host* data);
     int insertWorker(worker* data);
     int insertWorkerHasPartition(worker_has_partition* data);
+    int insertGraph(graph* data);
 };
 
 #endif  // JASMINEGRAPH_SQLITEDBINTERFACE_H

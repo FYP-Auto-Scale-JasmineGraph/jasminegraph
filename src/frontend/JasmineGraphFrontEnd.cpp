@@ -646,6 +646,7 @@ static void list_command(int connFd, SQLiteDBInterface sqlite, bool *loop_exit_p
 
 static void add_rdf_command(std::string masterIP, int connFd, SQLiteDBInterface sqlite, bool *loop_exit_p) {
     // add RDF graph
+    auto* graphData = new SQLiteDBInterface::graph();
     int result_wr = write(connFd, SEND.c_str(), FRONTEND_COMMAND_LENGTH);
     if (result_wr < 0) {
         frontend_logger.error("Error writing to socket");
@@ -662,13 +663,11 @@ static void add_rdf_command(std::string masterIP, int connFd, SQLiteDBInterface 
     // We get the name and the path to graph as a pair separated by |.
     char graph_data[FRONTEND_DATA_LENGTH + 1];
     bzero(graph_data, FRONTEND_DATA_LENGTH + 1);
-    string name = "";
-    string path = "";
 
     read(connFd, graph_data, FRONTEND_DATA_LENGTH);
 
     std::time_t time = chrono::system_clock::to_time_t(chrono::system_clock::now());
-    string uploadStartTime = ctime(&time);
+    graphData->upload_start_time = ctime(&time);
     string gData(graph_data);
 
     gData = Utils::trim_copy(gData, " \f\n\r\t\v");
@@ -686,10 +685,11 @@ static void add_rdf_command(std::string masterIP, int connFd, SQLiteDBInterface 
         return;
     }
 
-    name = strArr[0];
-    path = strArr[1];
+    graphData->name = strArr[0];
+    graphData->upload_path = strArr[1];
+    graphData->graph_status_idgraph_status = Conts::GRAPH_STATUS::LOADING;
 
-    if (JasmineGraphFrontEnd::graphExists(path, sqlite)) {
+    if (JasmineGraphFrontEnd::graphExists(graphData->upload_path, sqlite)) {
         frontend_logger.error("Graph exists");
         result_wr = write(connFd, INVALID_FORMAT.c_str(), INVALID_FORMAT.size());
         if (result_wr < 0) {
@@ -699,18 +699,13 @@ static void add_rdf_command(std::string masterIP, int connFd, SQLiteDBInterface 
         return;
     }
 
-    if (Utils::fileExists(path)) {
+    if (Utils::fileExists(graphData->upload_path)) {
         frontend_logger.info("Path exists");
 
-        string sqlStatement =
-            "INSERT INTO graph (name,upload_path,upload_start_time,upload_end_time,graph_status_idgraph_status,"
-            "vertexcount,centralpartitioncount,edgecount) VALUES(\"" +
-            name + "\", \"" + path + "\", \"" + uploadStartTime + "\", \"\",\"" +
-            to_string(Conts::GRAPH_STATUS::LOADING) + "\", \"\", \"\", \"\")";
-        int newGraphID = sqlite.runInsert(sqlStatement);
+        int newGraphID = sqlite.insertGraph(graphData);
 
         GetConfig appConfig;
-        appConfig.readConfigFile(path, newGraphID);
+        appConfig.readConfigFile(graphData->upload_path, newGraphID);
 
         MetisPartitioner *metisPartitioner = new MetisPartitioner(&sqlite);
         vector<std::map<int, string>> fullFileList;
@@ -743,6 +738,7 @@ static void add_rdf_command(std::string masterIP, int connFd, SQLiteDBInterface 
 }
 
 static void add_graph_command(std::string masterIP, int connFd, SQLiteDBInterface sqlite, bool *loop_exit_p) {
+    auto * graphData = new SQLiteDBInterface::graph();
     int result_wr = write(connFd, SEND.c_str(), FRONTEND_COMMAND_LENGTH);
     if (result_wr < 0) {
         frontend_logger.error("Error writing to socket");
@@ -760,14 +756,13 @@ static void add_graph_command(std::string masterIP, int connFd, SQLiteDBInterfac
     char graph_data[FRONTEND_DATA_LENGTH + 1];
     char partition_count[FRONTEND_DATA_LENGTH + 1];
     bzero(graph_data, FRONTEND_DATA_LENGTH + 1);
-    string name = "";
-    string path = "";
     string partitionCount = "";
+
 
     read(connFd, graph_data, FRONTEND_DATA_LENGTH);
 
     std::time_t time = chrono::system_clock::to_time_t(chrono::system_clock::now());
-    string uploadStartTime = ctime(&time);
+    graphData->upload_start_time = ctime(&time);
     string gData(graph_data);
 
     gData = Utils::trim_copy(gData, " \f\n\r\t\v");
@@ -781,36 +776,32 @@ static void add_graph_command(std::string masterIP, int connFd, SQLiteDBInterfac
         return;
     }
 
-    name = strArr[0];
-    path = strArr[1];
+    graphData->name = strArr[0];
+    graphData->upload_path = strArr[1];
+    graphData->graph_status_idgraph_status = Conts::GRAPH_STATUS::LOADING;
 
     if (strArr.size() == 3) {
         partitionCount = strArr[2];
     }
 
-    if (JasmineGraphFrontEnd::graphExists(path, sqlite)) {
+    if (JasmineGraphFrontEnd::graphExists(graphData->upload_path, sqlite)) {
         frontend_logger.error("Graph exists");
         // TODO: inform client?
         return;
     }
 
-    if (Utils::fileExists(path)) {
+    if (Utils::fileExists(graphData->upload_path)) {
         frontend_logger.info("Path exists");
 
-        string sqlStatement =
-            "INSERT INTO graph (name,upload_path,upload_start_time,upload_end_time,graph_status_idgraph_status,"
-            "vertexcount,centralpartitioncount,edgecount) VALUES(\"" +
-            name + "\", \"" + path + "\", \"" + uploadStartTime + "\", \"\",\"" +
-            to_string(Conts::GRAPH_STATUS::LOADING) + "\", \"\", \"\", \"\")";
-        int newGraphID = sqlite.runInsert(sqlStatement);
+        int newGraphID = sqlite.insertGraph(graphData);
         JasmineGraphServer *jasmineServer = new JasmineGraphServer();
         MetisPartitioner *partitioner = new MetisPartitioner(&sqlite);
         vector<std::map<int, string>> fullFileList;
 
-        partitioner->loadDataSet(path, newGraphID);
+        partitioner->loadDataSet(graphData->upload_path, newGraphID);
         int result = partitioner->constructMetisFormat(Conts::GRAPH_TYPE_NORMAL);
         if (result == 0) {
-            string reformattedFilePath = partitioner->reformatDataSet(path, newGraphID);
+            string reformattedFilePath = partitioner->reformatDataSet(graphData->upload_path, newGraphID);
             partitioner->loadDataSet(reformattedFilePath, newGraphID);
             partitioner->constructMetisFormat(Conts::GRAPH_TYPE_NORMAL_REFORMATTED);
             fullFileList = partitioner->partitioneWithGPMetis(partitionCount);
@@ -928,15 +919,15 @@ static void add_graph_cust_command(std::string masterIP, int connFd, SQLiteDBInt
     }
     char graph_data[FRONTEND_DATA_LENGTH + 1];
     bzero(graph_data, FRONTEND_DATA_LENGTH + 1);
-    string name = "";
-    string edgeListPath = "";
+    auto* graphData = new SQLiteDBInterface::graph();
+
     string attributeListPath = "";
     string attrDataType = "";
 
     read(connFd, graph_data, FRONTEND_DATA_LENGTH);
 
     std::time_t time = chrono::system_clock::to_time_t(chrono::system_clock::now());
-    string uploadStartTime = ctime(&time);
+    graphData->upload_start_time = ctime(&time);
     string gData(graph_data);
 
     gData = Utils::trim_copy(gData, " \f\n\r\t\v");
@@ -950,8 +941,9 @@ static void add_graph_cust_command(std::string masterIP, int connFd, SQLiteDBInt
         return;
     }
 
-    name = strArr[0];
-    edgeListPath = strArr[1];
+    graphData->name = strArr[0];
+    graphData->upload_path = strArr[1];
+    graphData->graph_status_idgraph_status = Conts::GRAPH_STATUS::LOADING;
     attributeListPath = strArr[2];
     // If data type is specified
     if (strArr.size() == 4) {
@@ -963,29 +955,24 @@ static void add_graph_cust_command(std::string masterIP, int connFd, SQLiteDBInt
         }
     }
 
-    if (JasmineGraphFrontEnd::graphExists(edgeListPath, sqlite)) {
+    if (JasmineGraphFrontEnd::graphExists(graphData->upload_path, sqlite)) {
         frontend_logger.error("Graph exists");
         // TODO: inform client?
         return;
     }
 
-    if (Utils::fileExists(edgeListPath) && Utils::fileExists(attributeListPath)) {
+    if (Utils::fileExists(graphData->upload_path) && Utils::fileExists(attributeListPath)) {
         std::cout << "Paths exists" << endl;
 
-        string sqlStatement =
-            "INSERT INTO graph (name,upload_path,upload_start_time,upload_end_time,graph_status_idgraph_status,"
-            "vertexcount,centralpartitioncount,edgecount) VALUES(\"" +
-            name + "\", \"" + edgeListPath + "\", \"" + uploadStartTime + "\", \"\",\"" +
-            to_string(Conts::GRAPH_STATUS::LOADING) + "\", \"\", \"\", \"\")";
-        int newGraphID = sqlite.runInsert(sqlStatement);
+        int newGraphID = sqlite.insertGraph(graphData);
         JasmineGraphServer *jasmineServer = new JasmineGraphServer();
         MetisPartitioner *partitioner = new MetisPartitioner(&sqlite);
         vector<std::map<int, string>> fullFileList;
         partitioner->loadContentData(attributeListPath, graphAttributeType, newGraphID, attrDataType);
-        partitioner->loadDataSet(edgeListPath, newGraphID);
+        partitioner->loadDataSet(graphData->upload_path, newGraphID);
         int result = partitioner->constructMetisFormat(Conts::GRAPH_TYPE_NORMAL);
         if (result == 0) {
-            string reformattedFilePath = partitioner->reformatDataSet(edgeListPath, newGraphID);
+            string reformattedFilePath = partitioner->reformatDataSet(graphData->upload_path, newGraphID);
             partitioner->loadDataSet(reformattedFilePath, newGraphID);
             partitioner->constructMetisFormat(Conts::GRAPH_TYPE_NORMAL_REFORMATTED);
             fullFileList = partitioner->partitioneWithGPMetis("");

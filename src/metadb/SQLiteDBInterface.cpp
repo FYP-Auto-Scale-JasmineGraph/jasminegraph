@@ -243,3 +243,17 @@ int SQLiteDBInterface::insertWorkerHasPartition(SQLiteDBInterface::worker_has_pa
             to_string(data->worker_idworker) + ")";
     return this->runInsert(sql);
 }
+
+int SQLiteDBInterface::insertGraph(SQLiteDBInterface::graph *data) {
+    std::string sql = "INSERT INTO graph (name,upload_path,upload_start_time,upload_end_time,"
+                      "graph_status_idgraph_status,vertexcount,centralpartitioncount,edgecount) VALUES("
+                      "\"" + data->name + "\", " +
+                      "\"" + data->upload_path + "\", " +
+                      "\"" + data->upload_start_time + "\", " +
+                      "\"" + data->upload_end_time + "\", " +
+                      to_string(data->graph_status_idgraph_status) + ", " +
+                      to_string(data->vertexcount) + ", " +
+                    to_string(data->centralpartitioncount) + ", " +
+                    to_string(data->edgecount) + ")";
+    return this->runInsert(sql);
+}
