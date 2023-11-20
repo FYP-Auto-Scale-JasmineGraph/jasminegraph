@@ -2098,29 +2098,24 @@ void JasmineGraphServer::createLogFilePath(std::string workerHost, std::string w
 
 void JasmineGraphServer::addHostsToMetaDB(std::string host, std::vector<int> portVector,
                                           std::vector<int> dataPortVector) {
-    string name = host;
-    string sqlStatement = "";
-    string ip_address = "";
-    string user = "";
+    auto* workerData = new SQLiteDBInterface::worker();
+    workerData->name = host;
+
     if (host.find('@') != std::string::npos) {
         vector<string> splitted = Utils::split(host, '@');
-        ip_address = splitted[1];
-        user = splitted[0];
+        workerData->ip = splitted[1];
+        workerData->user = splitted[0];
     } else {
-        ip_address = host;
+        workerData->ip = host;
     }
 
     for (int i = 0; i < portVector.size(); i++) {
-        int workerPort = portVector.at(i);
-        int workerDataPort = dataPortVector.at(i);
+        workerData->server_port = portVector.at(i);
+        workerData->server_data_port = dataPortVector.at(i);
 
-        if (!Utils::hostExists(name, ip_address, std::to_string(workerPort), this->sqlite)) {
-            string hostID = Utils::getHostID(name, this->sqlite);
-            sqlStatement =
-                ("INSERT INTO worker (host_idhost,name,ip,user,is_public,server_port,server_data_port) VALUES (\"" +
-                 hostID + "\", \"" + name + "\", \"" + ip_address + "\",\"" + user + "\", \"\",\"" +
-                 std::to_string(workerPort) + "\", \"" + std::to_string(workerDataPort) + "\")");
-            this->sqlite.runInsert(sqlStatement);
+        if (!Utils::hostExists(workerData->name, workerData->ip, std::to_string(workerData->server_port), this->sqlite)) {
+            workerData->idworker = atoi(Utils::getHostID(workerData->name, this->sqlite).c_str());
+            this->sqlite.insertWorker(workerData);
         }
     }
 }

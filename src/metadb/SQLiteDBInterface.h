@@ -27,6 +27,7 @@ class SQLiteDBInterface {
     sqlite3 *database{};
     std::string readDDLFile(const std::string& fileName);
     int createDatabase();
+    int runInsert(std::string);
 
  public:
     int init();
@@ -34,8 +35,6 @@ class SQLiteDBInterface {
     int finalize();
 
     std::vector<std::vector<std::pair<std::string, std::string>>> runSelect(std::string);
-
-    int runInsert(std::string);
 
     void runUpdate(std::string);
 
