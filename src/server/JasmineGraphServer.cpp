@@ -128,7 +128,7 @@ void JasmineGraphServer::start_workers() {
 
     for (it = hostsList.begin(); it < hostsList.end(); it++) {
         std::string hostItem = (*it);
-        auto* hostData = new SQLiteDBInterface::host();
+        SQLiteDBInterface::host *hostData{new SQLiteDBInterface::host()};
 
         if (hostItem.find('@') != std::string::npos) {
             vector<string> splitted = Utils::split(hostItem, '@');
@@ -177,7 +177,7 @@ void JasmineGraphServer::start_workers() {
     it = hostsList.begin();
 
     for (it = hostsList.begin(); it < hostsList.end(); it++) {
-        auto* workerData = new SQLiteDBInterface::worker();
+        SQLiteDBInterface::worker *workerData{new SQLiteDBInterface::worker()};
         std::string hostName = *it;
         string user = "";
         string ip = hostName;
@@ -217,7 +217,7 @@ void JasmineGraphServer::start_workers() {
             hostWorkerMap.push_back({*it, workerPort, workerDataPort});
             hostPortMap.insert(((pair<string, pair<int, int>>(*it, make_pair(workerPort, workerDataPort)))));
             hostListModeNWorkers--;
-            auto* workerData = new SQLiteDBInterface::worker();
+            SQLiteDBInterface::worker *workerData{new SQLiteDBInterface::worker()};
             workerData->idworker = workerIDCounter++;
             workerData->host_idhost = atoi(hostID.c_str());
             workerData->name = hostName;
@@ -401,7 +401,7 @@ bool JasmineGraphServer::spawnNewWorker(string host, string port, string dataPor
     }
 
     std::vector<vector<pair<string, string>>> selectHostOutput = refToSqlite.runSelect(selectHostSQL);
-    auto* hostData = new SQLiteDBInterface::host();
+    SQLiteDBInterface::host *hostData{new SQLiteDBInterface::host()};
 
     if (selectHostOutput.size() > 0) {
         hostData->idhost = atoi(selectHostOutput[0][0].second.c_str());
@@ -420,7 +420,7 @@ bool JasmineGraphServer::spawnNewWorker(string host, string port, string dataPor
     string maxIdWorker = selectMaxWorkerIdOutput[0][0].second;
     int maxWorkerId = atoi(maxIdWorker.c_str());
 
-    auto* workerData = new SQLiteDBInterface::worker();
+    SQLiteDBInterface::worker *workerData{new SQLiteDBInterface::worker()};
     workerData->idworker = maxWorkerId++;
     workerData->host_idhost = hostData->idhost;
     workerData->name = host;
@@ -833,7 +833,8 @@ void JasmineGraphServer::uploadGraphLocally(int graphID, const string graphType,
 void JasmineGraphServer::assignPartitionToWorker(std::string fileName, int graphId, std::string workerHost,
                                                  int workerPort, int workerDataPort) {
     SQLiteDBInterface refToSqlite = *new SQLiteDBInterface();
-    auto* workerPartitionData = new SQLiteDBInterface::worker_has_partition();
+    SQLiteDBInterface::worker_has_partition
+        *workerPartitionData{new SQLiteDBInterface::worker_has_partition()};
     refToSqlite.init();
     size_t lastindex = fileName.find_last_of(".");
     string rawname = fileName.substr(0, lastindex);

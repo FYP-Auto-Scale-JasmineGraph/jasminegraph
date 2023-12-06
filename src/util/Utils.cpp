@@ -388,7 +388,7 @@ void Utils::assignPartitionsToWorkers(int numberOfWorkers, SQLiteDBInterface sql
 
     if (v.size() > 0) {
         for (std::vector<vector<pair<string, string>>>::iterator i = v.begin(); i != v.end(); ++i) {
-            auto* workerPartitionData = new SQLiteDBInterface::worker_has_partition();
+            SQLiteDBInterface::worker_has_partition *workerPartitionData{new SQLiteDBInterface::worker_has_partition()};
             for (std::vector<pair<string, string>>::iterator j = (i->begin()); j != i->end(); ++j) {
                 workerPartitionData->partition_idpartition = atoi(j->second.c_str());
             }

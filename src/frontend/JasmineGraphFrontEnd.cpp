@@ -646,7 +646,7 @@ static void list_command(int connFd, SQLiteDBInterface sqlite, bool *loop_exit_p
 
 static void add_rdf_command(std::string masterIP, int connFd, SQLiteDBInterface sqlite, bool *loop_exit_p) {
     // add RDF graph
-    auto* graphData = new SQLiteDBInterface::graph();
+    SQLiteDBInterface::graph *graphData{new SQLiteDBInterface::graph()};
     int result_wr = write(connFd, SEND.c_str(), FRONTEND_COMMAND_LENGTH);
     if (result_wr < 0) {
         frontend_logger.error("Error writing to socket");
@@ -738,7 +738,7 @@ static void add_rdf_command(std::string masterIP, int connFd, SQLiteDBInterface 
 }
 
 static void add_graph_command(std::string masterIP, int connFd, SQLiteDBInterface sqlite, bool *loop_exit_p) {
-    auto * graphData = new SQLiteDBInterface::graph();
+    SQLiteDBInterface::graph *graphData{new SQLiteDBInterface::graph()};
     int result_wr = write(connFd, SEND.c_str(), FRONTEND_COMMAND_LENGTH);
     if (result_wr < 0) {
         frontend_logger.error("Error writing to socket");
@@ -919,7 +919,7 @@ static void add_graph_cust_command(std::string masterIP, int connFd, SQLiteDBInt
     }
     char graph_data[FRONTEND_DATA_LENGTH + 1];
     bzero(graph_data, FRONTEND_DATA_LENGTH + 1);
-    auto* graphData = new SQLiteDBInterface::graph();
+    SQLiteDBInterface::graph *graphData{new SQLiteDBInterface::graph()};
 
     string attributeListPath = "";
     string attrDataType = "";
@@ -1077,7 +1077,7 @@ static void add_model_command(int connFd, SQLiteDBInterface sqlite, bool *loop_e
 
     char graph_data[FRONTEND_DATA_LENGTH + 1];
     bzero(graph_data, FRONTEND_DATA_LENGTH + 1);
-    auto* modelData = new SQLiteDBInterface::model();
+    SQLiteDBInterface::model *modelData{new SQLiteDBInterface::model()};
 
     read(connFd, graph_data, FRONTEND_DATA_LENGTH);
 
