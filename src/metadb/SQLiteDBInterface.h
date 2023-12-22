@@ -18,6 +18,7 @@ limitations under the License.
 
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "../util/Conts.h"
@@ -25,6 +26,7 @@ limitations under the License.
 class SQLiteDBInterface {
  private:
     sqlite3 *database{};
+    std::string dbLocation;
     std::string readDDLFile(const std::string& fileName);
     int createDatabase();
     int runInsert(std::string);
@@ -44,8 +46,10 @@ class SQLiteDBInterface {
 
     SQLiteDBInterface();
 
+    explicit SQLiteDBInterface(std::string dbLocation);
+
     struct host {
-        int idhost;
+        int idhost{};
         std::string name;
         std::string ip;
         std::string is_public;
@@ -56,8 +60,8 @@ class SQLiteDBInterface {
     };
 
     struct worker {
-        int idworker;
-        int host_idhost;
+        int idworker{};
+        int host_idhost{};
         std::string name;
         std::string ip;
         std::string user;
@@ -84,7 +88,7 @@ class SQLiteDBInterface {
         std::string upload_path;
         std::string upload_start_time;
         std::string upload_end_time;
-        int graph_status_idgraph_status;
+        int graph_status_idgraph_status{};
         int vertexcount;
         int centralpartitioncount;
         int edgecount;

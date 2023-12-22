@@ -1,6 +1,6 @@
 project(JasmineGraphUnitTest)
 
-set(SOURCES main.cpp util/utils_test.cpp)
+set(SOURCES main.cpp util/utils_test.cpp metadb/SQLiteDBInterface_test.cpp)
 add_executable(${PROJECT_NAME} ${SOURCES})
 target_link_libraries(${PROJECT_NAME} gtest gtest_main JasmineGraphLib)
 

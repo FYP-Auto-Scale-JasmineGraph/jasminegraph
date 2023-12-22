@@ -23,7 +23,6 @@ limitations under the License.
 
 using namespace std;
 Logger db_logger;
-string dbLocation;
 
 int SQLiteDBInterface::init() {
     // Check if the SQLite database file exists and create if not exist
@@ -49,6 +48,10 @@ int SQLiteDBInterface::finalize() { return sqlite3_close(database); }
 
 SQLiteDBInterface::SQLiteDBInterface() {
     dbLocation = Utils::getJasmineGraphProperty("org.jasminegraph.db.location");
+}
+
+SQLiteDBInterface::SQLiteDBInterface(std::string dbLocation) {
+    this->dbLocation = dbLocation;
 }
 
 typedef vector<vector<pair<string, string>>> table_type;
@@ -195,9 +198,7 @@ int SQLiteDBInterface::createDatabase() {
     }
 
     // Execute DDL statements to create tables and schema
-    rc = sqlite3_exec(tempDatabase, readDDLFile("src/metadb/ddl.sql").c_str(), nullptr, nullptr, nullptr);
-    std::ofstream logFile("ddl_content.log");
-    logFile << readDDLFile("src/metadb/ddl.sql").c_str();
+    rc = sqlite3_exec(tempDatabase, readDDLFile(ROOT_DIR"src/metadb/ddl.sql").c_str(), nullptr, nullptr, nullptr);
     if (rc) {
         db_logger.error("DDL execution failed: " + string(sqlite3_errmsg(tempDatabase)));
         sqlite3_close(tempDatabase);
