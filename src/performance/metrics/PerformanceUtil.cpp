@@ -43,7 +43,6 @@ int PerformanceUtil::collectPerformanceStatistics() {
 
     for (placeListIterator = placeList.begin(); placeListIterator != placeList.end(); ++placeListIterator) {
         vector<pair<string, string>> place = *placeListIterator;
-        std::string host;
         std::string requestResourceAllocation = "false";
 
         std::string ip = place.at(0).second;
@@ -53,12 +52,6 @@ int PerformanceUtil::collectPerformanceStatistics() {
         std::string isHostReporter = place.at(4).second;
         std::string hostId = place.at(5).second;
         std::string placeId = place.at(6).second;
-
-        if (ip.find("localhost") != std::string::npos) {
-            host = "localhost";
-        } else {
-            host = user + "@" + ip;
-        }
 
         if (isHostReporter.find("true") != std::string::npos) {
             std::string hostSearch = "select total_cpu_cores,total_memory from host where idhost='" + hostId + "'";
@@ -77,7 +70,7 @@ int PerformanceUtil::collectPerformanceStatistics() {
         if (isMaster.find("true") != std::string::npos) {
             collectLocalPerformanceData(isHostReporter, requestResourceAllocation, hostId, placeId);
         } else {
-            collectRemotePerformanceData(host, atoi(serverPort.c_str()), isHostReporter, requestResourceAllocation,
+            collectRemotePerformanceData(ip, atoi(serverPort.c_str()), isHostReporter, requestResourceAllocation,
                                          hostId, placeId);
         }
     }
@@ -121,7 +114,6 @@ int PerformanceUtil::collectSLAResourceConsumption(std::vector<Place> placeList,
 
     for (placeListIterator = placeList.begin(); placeListIterator != placeList.end(); ++placeListIterator) {
         Place place = *placeListIterator;
-        std::string host;
         std::string requestResourceAllocation = "false";
 
         std::string ip = place.ip;
@@ -132,13 +124,7 @@ int PerformanceUtil::collectSLAResourceConsumption(std::vector<Place> placeList,
         std::string hostId = place.hostId;
         std::string placeId = place.placeId;
 
-        if (ip.find("localhost") != std::string::npos || ip.compare(masterIP) == 0) {
-            host = ip;
-        } else {
-            host = user + "@" + ip;
-        }
-
-        if (isMaster.find("true") != std::string::npos || host == "localhost" || host.compare(masterIP) == 0) {
+        if (isMaster.find("true") != std::string::npos || ip == "localhost" || ip.compare(masterIP) == 0) {
             collectLocalSLAResourceUtilization(graphId, placeId, command, category, elapsedTime, autoCalibrate);
         }
     }
@@ -156,7 +142,6 @@ std::vector<ResourceConsumption> PerformanceUtil::retrieveCurrentResourceUtiliza
 
     for (placeListIterator = placeList.begin(); placeListIterator != placeList.end(); ++placeListIterator) {
         vector<pair<string, string>> place = *placeListIterator;
-        std::string host;
         std::string requestResourceAllocation = "false";
 
         std::string ip = place.at(0).second;
@@ -166,12 +151,6 @@ std::vector<ResourceConsumption> PerformanceUtil::retrieveCurrentResourceUtiliza
         std::string isHostReporter = place.at(4).second;
         std::string hostId = place.at(5).second;
         std::string placeId = place.at(6).second;
-
-        if (ip.find("localhost") != std::string::npos || ip.compare(masterIP) == 0) {
-            host = "localhost";
-        } else {
-            host = user + "@" + ip;
-        }
 
         if (isHostReporter.find("true") != std::string::npos) {
             std::string hostSearch = "select total_cpu_cores,total_memory from host where idhost='" + hostId + "'";
@@ -187,12 +166,12 @@ std::vector<ResourceConsumption> PerformanceUtil::retrieveCurrentResourceUtiliza
             }
         }
 
-        if ((isMaster.find("true") != std::string::npos || host == "localhost" || host.compare(masterIP) == 0) &&
+        if ((isMaster.find("true") != std::string::npos || ip.compare("localhost") == 0 || ip.compare(masterIP) == 0) &&
             isHostReporter.find("true") != std::string::npos) {
-            resourceConsumption = retrieveLocalResourceConsumption(host, placeId);
+            resourceConsumption = retrieveLocalResourceConsumption(ip, placeId);
             placeResourceConsumptionList.push_back(resourceConsumption);
         } else if (isHostReporter.find("true") != std::string::npos) {
-            resourceConsumption = retrieveRemoteResourceConsumption(host, atoi(serverPort.c_str()), hostId, placeId);
+            resourceConsumption = retrieveRemoteResourceConsumption(ip, atoi(serverPort.c_str()), hostId, placeId);
             placeResourceConsumptionList.push_back(resourceConsumption);
         }
     }
@@ -1248,7 +1227,6 @@ void PerformanceUtil::updateRemoteResourceConsumption(PerformanceSQLiteDBInterfa
 
     for (placeListIterator = placeList.begin(); placeListIterator != placeList.end(); ++placeListIterator) {
         Place place = *placeListIterator;
-        std::string host;
 
         std::string ip = place.ip;
         std::string user = place.user;
@@ -1259,16 +1237,10 @@ void PerformanceUtil::updateRemoteResourceConsumption(PerformanceSQLiteDBInterfa
         std::string placeId = place.placeId;
         std::string graphSlaId;
 
-        if (ip.find("localhost") != std::string::npos || ip.compare(masterIP) == 0) {
-            host = ip;
+        if (isMaster.find("true") != std::string::npos || ip.compare("localhost") == 0 || ip.compare(masterIP) == 0) {
         } else {
-            host = user + "@" + ip;
-        }
-
-        if (isMaster.find("true") != std::string::npos || host == "localhost" || host.compare(masterIP) == 0) {
-        } else {
-            std::string loadString = requestRemoteLoadAverages(host, atoi(serverPort.c_str()), isHostReporter, "false",
-                                                               placeId, 0, masterIP);
+            std::string loadString =
+                requestRemoteLoadAverages(ip, atoi(serverPort.c_str()), isHostReporter, "false", placeId, 0, masterIP);
             std::vector<std::string> loadVector = Utils::split(loadString, ',');
             std::vector<std::string>::iterator loadVectorIterator;
             string valuesString;
@@ -1450,10 +1422,6 @@ std::string PerformanceUtil::requestRemoteLoadAverages(std::string host, int por
     if (sockfd < 0) {
         std::cerr << "Cannot create socket" << std::endl;
         return 0;
-    }
-
-    if (host.find('@') != std::string::npos) {
-        host = Utils::split(host, '@')[1];
     }
 
     server = gethostbyname(host.c_str());
