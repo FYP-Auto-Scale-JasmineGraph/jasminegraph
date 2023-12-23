@@ -1,4 +1,8 @@
 FROM miyurud/jasminegraph:20230909T110050
+
+RUN apt-get update
+RUN apt-get install libcurl4-openssl-dev -y
+
 ENV HOME="/home/ubuntu"
 ENV JASMINEGRAPH_HOME="/home/ubuntu/software/jasminegraph"
 
