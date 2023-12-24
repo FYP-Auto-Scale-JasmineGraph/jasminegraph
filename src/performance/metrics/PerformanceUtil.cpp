@@ -217,197 +217,194 @@ void PerformanceUtil::collectRemotePerformanceData(std::string host, int port, s
         return;
     }
 
-    bzero(data, 301);
-    write(sockfd, JasmineGraphInstanceProtocol::HANDSHAKE.c_str(), JasmineGraphInstanceProtocol::HANDSHAKE.size());
-    scheduler_logger.log("Sent : " + JasmineGraphInstanceProtocol::HANDSHAKE, "info");
-    bzero(data, 301);
-    read(sockfd, data, 300);
-    string response = (data);
+    Utils::send_str_wrapper(sockfd, JasmineGraphInstanceProtocol::HANDSHAKE);
+    scheduler_logger.info("Sent: " + JasmineGraphInstanceProtocol::HANDSHAKE);
 
-    response = Utils::trim_copy(response, " \f\n\r\t\v");
+    string response = Utils::read_str_trim_wrapper(sockfd, data, INSTANCE_DATA_LENGTH);
+    if (response.compare(JasmineGraphInstanceProtocol::HANDSHAKE_OK) != 0) {
+        scheduler_logger.error("Expected: " + JasmineGraphInstanceProtocol::HANDSHAKE_OK + " ; Received: " + response);
+        return;
+    }
+    scheduler_logger.info("Received: " + response);
 
-    if (response.compare(JasmineGraphInstanceProtocol::HANDSHAKE_OK) == 0) {
-        scheduler_logger.log("Received : " + JasmineGraphInstanceProtocol::HANDSHAKE_OK, "info");
-        string server_host = Utils::getJasmineGraphProperty("org.jasminegraph.server.host");
-        write(sockfd, server_host.c_str(), server_host.size());
-        scheduler_logger.log("Sent : " + server_host, "info");
+    string server_host = Utils::getJasmineGraphProperty("org.jasminegraph.server.host");
+    Utils::send_str_wrapper(sockfd, server_host);
+    scheduler_logger.info("Sent: " + server_host);
 
-        write(sockfd, JasmineGraphInstanceProtocol::PERFORMANCE_STATISTICS.c_str(),
-              JasmineGraphInstanceProtocol::PERFORMANCE_STATISTICS.size());
-        scheduler_logger.log("Sent : " + JasmineGraphInstanceProtocol::PERFORMANCE_STATISTICS, "info");
-        bzero(data, 301);
-        read(sockfd, data, 300);
-        response = (data);
-        response = Utils::trim_copy(response, " \f\n\r\t\v");
-        scheduler_logger.log("Received : " + JasmineGraphInstanceProtocol::OK, "info");
+    response = Utils::read_str_trim_wrapper(sockfd, data, INSTANCE_DATA_LENGTH);
+    if (response.compare(JasmineGraphInstanceProtocol::HOST_OK) != 0) {
+        scheduler_logger.error("Expected: " + JasmineGraphInstanceProtocol::HOST_OK + " ; Received: " + response);
+        return;
+    }
+    scheduler_logger.info("Received: " + response);
 
-        if (response.compare(JasmineGraphInstanceProtocol::OK) == 0) {
-            // scheduler_logger.log("Received : " + JasmineGraphInstanceProtocol::OK, "info");
-            write(sockfd, isVMStatManager.c_str(), isVMStatManager.size());
-            scheduler_logger.log("Sent : VM Manager Status " + isVMStatManager, "info");
+    Utils::send_str_wrapper(sockfd, JasmineGraphInstanceProtocol::PERFORMANCE_STATISTICS);
+    scheduler_logger.info("Sent: " + JasmineGraphInstanceProtocol::PERFORMANCE_STATISTICS);
 
-            bzero(data, 301);
-            read(sockfd, data, 300);
-            response = (data);
-            response = Utils::trim_copy(response, " \f\n\r\t\v");
+    response = Utils::read_str_trim_wrapper(sockfd, data, INSTANCE_DATA_LENGTH);
+    if (response.compare(JasmineGraphInstanceProtocol::OK) != 0) {
+        scheduler_logger.error("Expected: " + JasmineGraphInstanceProtocol::OK + " ; Received: " + response);
+        return;
+    }
+    scheduler_logger.info("Received: " + response);
 
-            if (response.compare(JasmineGraphInstanceProtocol::OK) == 0) {
-                write(sockfd, isResourceAllocationRequired.c_str(), isResourceAllocationRequired.size());
-                scheduler_logger.log("Sent : Resource Allocation Requested " + isResourceAllocationRequired, "info");
+    Utils::send_str_wrapper(sockfd, isVMStatManager);
+    scheduler_logger.info("Sent: VM Manager Status " + isVMStatManager);
 
-                bzero(data, 301);
-                read(sockfd, data, 300);
-                response = (data);
-                response = Utils::trim_copy(response, " \f\n\r\t\v");
+    response = Utils::read_str_trim_wrapper(sockfd, data, INSTANCE_DATA_LENGTH);
+    if (response.compare(JasmineGraphInstanceProtocol::OK) != 0) {
+        scheduler_logger.error("Expected: " + JasmineGraphInstanceProtocol::OK + " ; Received: " + response);
+        return;
+    }
+    scheduler_logger.info("Received: " + response);
 
-                scheduler_logger.log("Performance Response " + response, "info");
+    Utils::send_str_wrapper(sockfd, isResourceAllocationRequired);
+    scheduler_logger.info("Sent: Resource Allocation Requested " + isResourceAllocationRequired);
 
-                std::vector<std::string> strArr = Utils::split(response, ',');
+    response = Utils::read_str_trim_wrapper(sockfd, data, INSTANCE_DATA_LENGTH);
+    scheduler_logger.info("Performance Response: " + response);
 
-                std::string processTime = strArr[0];
-                std::string memoryUsage = strArr[1];
-                std::string cpuUsage = strArr[2];
-                std::string loadAverage = strArr[3];
+    std::vector<std::string> strArr = Utils::split(response, ',');
 
-                if (isVMStatManager == "true" && strArr.size() > 4) {
-                    std::string memoryConsumption = strArr[4];
-                    std::string cpuUsage = strArr[5];
-                    string vmPerformanceSql =
-                        "insert into host_performance_data (date_time, memory_usage, cpu_usage, idhost) values ('" +
-                        processTime + "','" + memoryConsumption + "','" + cpuUsage + "','" + hostId + "')";
+    std::string processTime = strArr[0];
+    std::string memoryUsage = strArr[1];
+    std::string cpuUsage = strArr[2];
+    std::string loadAverage = strArr[3];
 
-                    perfDb.runInsert(vmPerformanceSql);
+    if (isVMStatManager == "true" && strArr.size() > 4) {
+        std::string memoryConsumption = strArr[4];
+        std::string cpuUsage = strArr[5];
+        string vmPerformanceSql =
+            "insert into host_performance_data (date_time, memory_usage, cpu_usage, idhost) values ('" + processTime +
+            "','" + memoryConsumption + "','" + cpuUsage + "','" + hostId + "')";
 
-                    CURL* curl;
-                    CURLcode res;
-                    std::string response_host_perf_data;
+        perfDb.runInsert(vmPerformanceSql);
 
-                    curl = curl_easy_init();
-                    if (curl) {
-                        // curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-                        curl_easy_setopt(curl, CURLOPT_URL, "http://192.168.8.150:9091/metrics/job/hostPerfData");
+        CURL* curl;
+        CURLcode res;
+        std::string response_host_perf_data;
 
-                        // Set the callback function to handle the response data
-                        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-                        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_host_perf_data);
-                        std::string job_data = "memory_consumption " + memoryConsumption + "\n";
-                        const char* data = job_data.c_str();
+        curl = curl_easy_init();
+        if (curl) {
+            // curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+            curl_easy_setopt(curl, CURLOPT_URL, "http://192.168.8.150:9091/metrics/job/hostPerfData");
 
-                        curl_slist* headers = NULL;
-                        headers = curl_slist_append(headers, "Content-Type: application/x-prometheus-remote-write-v1");
-                        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+            // Set the callback function to handle the response data
+            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_host_perf_data);
+            std::string job_data = "memory_consumption " + memoryConsumption + "\n";
+            const char* data = job_data.c_str();
 
-                        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
-                        curl_easy_setopt(curl, CURLOPT_POST, 1);
+            curl_slist* headers = NULL;
+            headers = curl_slist_append(headers, "Content-Type: application/x-prometheus-remote-write-v1");
+            curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 
-                        res = curl_easy_perform(curl);
-                        if (res != CURLE_OK) {
-                            std::cerr << "cURL failed: " << curl_easy_strerror(res) << std::endl;
-                        }
+            curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
+            curl_easy_setopt(curl, CURLOPT_POST, 1);
 
-                        curl_easy_cleanup(curl);
-                    }
-
-                    curl = curl_easy_init();
-                    if (curl) {
-                        // curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-                        curl_easy_setopt(curl, CURLOPT_URL, "http://192.168.8.150:9091/metrics/job/hostPerfData");
-
-                        // Set the callback function to handle the response data
-                        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-                        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_host_perf_data);
-                        std::string job_data = "cpu_usage " + cpuUsage + "\n";
-                        const char* data = job_data.c_str();
-
-                        curl_slist* headers = NULL;
-                        headers = curl_slist_append(headers, "Content-Type: application/x-prometheus-remote-write-v1");
-                        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-
-                        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
-                        curl_easy_setopt(curl, CURLOPT_POST, 1);
-
-                        res = curl_easy_perform(curl);
-                        if (res != CURLE_OK) {
-                            std::cerr << "cURL failed: " << curl_easy_strerror(res) << std::endl;
-                        }
-
-                        curl_easy_cleanup(curl);
-                    }
-
-                    if (isResourceAllocationRequired == "true") {
-                        std::string totalMemory = strArr[6];
-                        std::string totalCores = strArr[7];
-                        string allocationUpdateSql = "update host set total_cpu_cores='" + totalCores +
-                                                     "',total_memory='" + totalMemory + "' where idhost='" + hostId +
-                                                     "'";
-
-                        perfDb.runUpdate(allocationUpdateSql);
-                    }
-                }
-
-                string placePerfSql =
-                    "insert into place_performance_data (idplace, memory_usage, cpu_usage, date_time) values ('" +
-                    placeId + "','" + memoryUsage + "','" + cpuUsage + "','" + processTime + "')";
-
-                perfDb.runInsert(placePerfSql);
-
-                CURL* curl;
-                CURLcode res;
-                std::string response_place_perf_data;
-
-                curl = curl_easy_init();
-                if (curl) {
-                    // curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-                    curl_easy_setopt(curl, CURLOPT_URL, "http://192.168.8.150:9091/metrics/job/placePerfData");
-
-                    // Set the callback function to handle the response data
-                    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-                    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_place_perf_data);
-                    std::string job_data = "memory_usage " + memoryUsage + "\n";
-                    const char* data = job_data.c_str();
-
-                    curl_slist* headers = NULL;
-                    headers = curl_slist_append(headers, "Content-Type: application/x-prometheus-remote-write-v1");
-                    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-
-                    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
-                    curl_easy_setopt(curl, CURLOPT_POST, 1);
-
-                    res = curl_easy_perform(curl);
-                    if (res != CURLE_OK) {
-                        std::cerr << "cURL failed: " << curl_easy_strerror(res) << std::endl;
-                    }
-
-                    curl_easy_cleanup(curl);
-                }
-
-                curl = curl_easy_init();
-                if (curl) {
-                    // curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-                    curl_easy_setopt(curl, CURLOPT_URL, "http://192.168.8.150:9091/metrics/job/placePerfData");
-
-                    // Set the callback function to handle the response data
-                    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-                    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_place_perf_data);
-                    std::string job_data = "cpu_usage " + cpuUsage + "\n";
-                    const char* data = job_data.c_str();
-
-                    curl_slist* headers = NULL;
-                    headers = curl_slist_append(headers, "Content-Type: application/x-prometheus-remote-write-v1");
-                    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-
-                    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
-                    curl_easy_setopt(curl, CURLOPT_POST, 1);
-
-                    res = curl_easy_perform(curl);
-                    if (res != CURLE_OK) {
-                        std::cerr << "cURL failed: " << curl_easy_strerror(res) << std::endl;
-                    }
-
-                    curl_easy_cleanup(curl);
-                }
+            res = curl_easy_perform(curl);
+            if (res != CURLE_OK) {
+                std::cerr << "cURL failed: " << curl_easy_strerror(res) << std::endl;
             }
+
+            curl_easy_cleanup(curl);
         }
+
+        curl = curl_easy_init();
+        if (curl) {
+            // curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+            curl_easy_setopt(curl, CURLOPT_URL, "http://192.168.8.150:9091/metrics/job/hostPerfData");
+
+            // Set the callback function to handle the response data
+            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_host_perf_data);
+            std::string job_data = "cpu_usage " + cpuUsage + "\n";
+            const char* data = job_data.c_str();
+
+            curl_slist* headers = NULL;
+            headers = curl_slist_append(headers, "Content-Type: application/x-prometheus-remote-write-v1");
+            curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+
+            curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
+            curl_easy_setopt(curl, CURLOPT_POST, 1);
+
+            res = curl_easy_perform(curl);
+            if (res != CURLE_OK) {
+                std::cerr << "cURL failed: " << curl_easy_strerror(res) << std::endl;
+            }
+
+            curl_easy_cleanup(curl);
+        }
+
+        if (isResourceAllocationRequired == "true") {
+            std::string totalMemory = strArr[6];
+            std::string totalCores = strArr[7];
+            string allocationUpdateSql = "update host set total_cpu_cores='" + totalCores + "',total_memory='" +
+                                         totalMemory + "' where idhost='" + hostId + "'";
+
+            perfDb.runUpdate(allocationUpdateSql);
+        }
+    }
+
+    string placePerfSql = "insert into place_performance_data (idplace, memory_usage, cpu_usage, date_time) values ('" +
+                          placeId + "','" + memoryUsage + "','" + cpuUsage + "','" + processTime + "')";
+
+    perfDb.runInsert(placePerfSql);
+
+    CURL* curl;
+    CURLcode res;
+    std::string response_place_perf_data;
+
+    curl = curl_easy_init();
+    if (curl) {
+        // curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_URL, "http://192.168.8.150:9091/metrics/job/placePerfData");
+
+        // Set the callback function to handle the response data
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_place_perf_data);
+        std::string job_data = "memory_usage " + memoryUsage + "\n";
+        const char* data = job_data.c_str();
+
+        curl_slist* headers = NULL;
+        headers = curl_slist_append(headers, "Content-Type: application/x-prometheus-remote-write-v1");
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
+        curl_easy_setopt(curl, CURLOPT_POST, 1);
+
+        res = curl_easy_perform(curl);
+        if (res != CURLE_OK) {
+            std::cerr << "cURL failed: " << curl_easy_strerror(res) << std::endl;
+        }
+
+        curl_easy_cleanup(curl);
+    }
+
+    curl = curl_easy_init();
+    if (curl) {
+        // curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_URL, "http://192.168.8.150:9091/metrics/job/placePerfData");
+
+        // Set the callback function to handle the response data
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_place_perf_data);
+        std::string job_data = "cpu_usage " + cpuUsage + "\n";
+        const char* data = job_data.c_str();
+
+        curl_slist* headers = NULL;
+        headers = curl_slist_append(headers, "Content-Type: application/x-prometheus-remote-write-v1");
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
+        curl_easy_setopt(curl, CURLOPT_POST, 1);
+
+        res = curl_easy_perform(curl);
+        if (res != CURLE_OK) {
+            std::cerr << "cURL failed: " << curl_easy_strerror(res) << std::endl;
+        }
+
+        curl_easy_cleanup(curl);
     }
 }
 
