@@ -60,6 +60,7 @@ set(HEADERS src/backend/JasmineGraphBackend.h
         src/util/scheduler/Scheduler.h
         src/util/scheduler/SchedulerService.h
         src/util/scheduler/ctpl_stl.h
+        src/k8s/K8sInterface.h
         )
 
 set(SOURCES src/backend/JasmineGraphBackend.cpp
@@ -110,7 +111,7 @@ set(SOURCES src/backend/JasmineGraphBackend.cpp
         src/util/kafka/KafkaCC.cpp
         src/util/logger/Logger.cpp
         src/util/scheduler/SchedulerService.cpp
-        )
+        src/k8s/K8sInterface.cpp)
 
 add_library(JasmineGraphLib ${HEADERS} ${SOURCES})
 add_executable(JasmineGraph main.h main.cpp)
