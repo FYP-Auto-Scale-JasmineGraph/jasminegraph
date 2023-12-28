@@ -20,11 +20,17 @@ jobs:
         ref: ${{github.head_ref}}
         fetch-depth: 0
         repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+    - uses: jupyterhub/action-k3s-helm@v3
+      with:
+        docker-enabled: true
 
     - name: Run unit test
       run: |
-        docker run --name jasminegraph-prerequisite -v $(pwd):/home/ubuntu/software/jasminegraph -d -t -i miyurud/jasminegraph /bin/bash
-        docker exec jasminegraph-prerequisite bash -c "pip install gcovr && cd /home/ubuntu/software/jasminegraph && mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=DEBUG .. && make -j4 && make -j2 coverage"
+        docker pull ishad1999/jasminegraph
+        kubectl apply -f ./.github/workflows/resources/prerequisite-pod.yaml
+        sleep 30
+        kubectl get pods
+        kubectl exec jasminegraph-prerequisite -- bash -c "pip install gcovr && cd /home/ubuntu/software/jasminegraph && mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=DEBUG .. && LD_LIBRARY_PATH=/usr/local/lib make -j4 && LD_LIBRARY_PATH=/usr/local/lib make -j2 coverage"
 
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v3
