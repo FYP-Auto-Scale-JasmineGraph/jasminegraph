@@ -24,10 +24,15 @@ jobs:
       with:
         docker-enabled: true
 
+    - name: Build unit test
+      run: docker build -f ./tests/unit/Dockerfile -t jasminegraph:unit .
+
     - name: Run unit test
       run: |
-        docker run --name jasminegraph-prerequisite -v $(pwd):/home/ubuntu/software/jasminegraph -d -t -i miyurud/jasminegraph /bin/bash
-        docker exec jasminegraph-prerequisite bash -c "pip install gcovr && cd /home/ubuntu/software/jasminegraph && mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=DEBUG .. && make -j4 && make -j2 coverage"
+        mkdir build
+        kubectl apply -f ./.github/workflows/resources/unit-test-conf.yaml
+        sleep 30
+        kubectl logs -f jasminegraph-unit-test-pod
 
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v3

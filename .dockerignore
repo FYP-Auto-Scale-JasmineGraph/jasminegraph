@@ -1,4 +1,4 @@
-tests
+tests/integration
 metadb
 performancedb
 docs
@@ -12,3 +12,4 @@ logs
 test-docker.sh
 README.md
 LICENSE
+Dockerfile
