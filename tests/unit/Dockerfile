@@ -1,4 +1,4 @@
-FROM miyurud/jasminegraph:20230909T110050
+FROM ishad1999/jasminegraph
 
 RUN python3 -m pip install --no-cache-dir gcovr
 
@@ -19,10 +19,11 @@ COPY ./conf ./conf
 RUN mkdir build
 RUN mkdir tests
 COPY ./tests/unit ./tests/unit
+COPY ./k8s ./k8s
 
 WORKDIR "${JASMINEGRAPH_HOME}/build"
 
 RUN cmake -DCMAKE_BUILD_TYPE=DEBUG ..
 RUN make -j4
 
-CMD ["bash", "-c", "make -j2 coverage && cp coverage.xml ../build_mount/"]
+CMD ["bash", "-c", "LD_LIBRARY_PATH=/usr/local/lib make -j2 coverage && cp coverage.xml ../coverage/"]
