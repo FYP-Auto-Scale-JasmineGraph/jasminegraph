@@ -23,11 +23,8 @@ limitations under the License.
 class SQLiteDBInterface {
  private:
     sqlite3 *database;
-    std::string databaseLocation;
 
  public:
-    explicit SQLiteDBInterface(std::string databaseLocation);
-
     int init();
 
     int finalize();

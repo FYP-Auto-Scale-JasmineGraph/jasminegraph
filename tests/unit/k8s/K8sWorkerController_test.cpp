@@ -11,11 +11,7 @@ class K8sWorkerControllerTest : public ::testing::Test {
     K8sInterface *interface{};
 
     void SetUp() override {
-        std::ifstream src(ROOT_DIR "/metadb/jasminegraph_meta.db", std::ios::binary);
-        std::ofstream dst(TEST_RESOURCE_DIR "/temp/jasminegraph_meta.db", std::ios::binary);
-        dst << src.rdbuf();
-
-        metadb = new SQLiteDBInterface(TEST_RESOURCE_DIR "/temp/jasminegraph_meta.db");
+        metadb = new SQLiteDBInterface();
         metadb->init();
         controller = new K8sWorkerController("10.43.0.1", 2, metadb);
         interface = new K8sInterface();
