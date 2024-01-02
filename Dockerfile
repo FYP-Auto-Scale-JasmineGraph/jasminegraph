@@ -1,4 +1,4 @@
-FROM miyurud/jasminegraph-prerequisite:20240101T095619
+FROM miyurud/jasminegraph-prerequisites:20240101T095619
 ENV HOME="/home/ubuntu"
 ENV JASMINEGRAPH_HOME="/home/ubuntu/software/jasminegraph"
 
