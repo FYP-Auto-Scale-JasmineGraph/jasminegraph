@@ -44,7 +44,6 @@ jobs:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       with:
         files: ./coverage/coverage.xml
-        fail_ci_if_error: true
 
 
     - name: Run Integration Tests
