@@ -58,8 +58,16 @@ int main(int argc, char *argv[]) {
         int numberOfWorkers = atoi(argv[4]);
         std::string workerIps = argv[5];
         enableNmon = argv[6];
-        server = new JasmineGraphServer();
+        server = JasmineGraphServer::getInstance();
         thread schedulerThread(SchedulerService::startScheduler);
+
+        if (profile == Conts::PROFILE_K8S) {
+            K8sInterface* interface = new K8sInterface();
+            masterIp = interface->getMasterIp();
+            if (masterIp.empty()) {
+                masterIp = interface->createJasmineGraphMasterService()->spec->cluster_ip;
+            }
+        }
         server->run(profile, masterIp, numberOfWorkers, workerIps, enableNmon);
 
         while (server->isRunning()) {

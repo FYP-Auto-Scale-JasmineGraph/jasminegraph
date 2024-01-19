@@ -14,6 +14,8 @@ limitations under the License.
 #define JASMINEGRAPH_UTILS_H
 
 #include <arpa/inet.h>
+#include <nlohmann/json.hpp>
+#include <yaml-cpp/yaml.h>
 
 #include <algorithm>
 #include <fstream>
@@ -29,6 +31,7 @@ limitations under the License.
 
 using std::map;
 using std::unordered_map;
+using json = nlohmann::json;
 
 class Utils {
  private:
@@ -45,11 +48,17 @@ class Utils {
 
     static std::string getJasmineGraphProperty(std::string key);
 
-    static std::vector<worker> getWorkerList(SQLiteDBInterface sqlite);
+    static std::vector<worker> getWorkerList(SQLiteDBInterface *sqlite);
 
     static std::vector<std::string> getHostListFromProperties();
 
     static std::vector<std::string> getFileContent(std::string);
+
+    static std::string getFileContentAsString(std::string);
+
+    static std::string replaceAll(std::string content, const std::string& oldValue, const std::string& newValue);
+
+    static void writeFileContent(const std::string& filePath, const std::string& content);
 
     static std::vector<std::string> split(const std::string &, char delimiter);
 
@@ -65,7 +74,7 @@ class Utils {
 
     static void createDirectory(const std::string dirName);
 
-    static std::vector<std::string> getListOfFilesInDirectory(const std::string dirName);
+    static std::vector<std::string> getListOfFilesInDirectory(std::string dirName);
 
     static int deleteDirectory(const std::string dirName);
 
@@ -81,7 +90,7 @@ class Utils {
 
     static int unzipFile(std::string filePath, std::string mode = "pigz");
 
-    static bool hostExists(std::string name, std::string ip, std::string workerPort, SQLiteDBInterface sqlite);
+    static bool hostExists(std::string name, std::string ip, std::string workerPort, SQLiteDBInterface *sqlite);
 
     static int compressDirectory(const std::string filePath);
 
@@ -89,11 +98,11 @@ class Utils {
 
     static int copyToDirectory(std::string currentPath, std::string copyPath);
 
-    static std::string getHostID(std::string hostName, SQLiteDBInterface sqlite);
+    static std::string getHostID(std::string hostName, SQLiteDBInterface *sqlite);
 
-    static void assignPartitionsToWorkers(int numberOfWorkers, SQLiteDBInterface sqlite);
+    static void assignPartitionsToWorkers(int numberOfWorkers, SQLiteDBInterface *sqlite);
 
-    static void updateSLAInformation(PerformanceSQLiteDBInterface perfSqlite, std::string graphId, int partitionCount,
+    static void updateSLAInformation(PerformanceSQLiteDBInterface *perfSqlite, std::string graphId, int partitionCount,
                                      long newSlaValue, std::string command, std::string category);
 
     static void editFlagZero(std::string flagPath);
@@ -147,6 +156,7 @@ class Utils {
     static bool send_str_wrapper(int connFd, std::string str);
 
     static std::string getCurrentTimestamp();
+    static std::string getJsonStringFromYamlFile(const std::string& yamlFile);
 };
 
 #endif  // JASMINEGRAPH_UTILS_H

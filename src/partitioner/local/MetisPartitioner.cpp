@@ -26,7 +26,7 @@ std::mutex masterAttrFileMutex;
 std::mutex dbLock;
 
 MetisPartitioner::MetisPartitioner(SQLiteDBInterface *sqlite) {
-    this->sqlite = *sqlite;
+    this->sqlite = sqlite;
     std::string partitionCount = Utils::getJasmineGraphProperty("org.jasminegraph.server.npartitions");
     nParts = atoi(partitionCount.c_str());
 }
@@ -212,7 +212,6 @@ std::vector<std::map<int, std::string>> MetisPartitioner::partitioneWithGPMetis(
 
     char buffer[128];
     std::string result = "";
-    FILE *headerModify;
     std::string metisBinDir = Utils::getJasmineGraphProperty("org.jasminegraph.partitioner.metis.bin");
     string metisCommand =
         metisBinDir + "/gpmetis " + this->outputFilePath + "/grf " + to_string(this->nParts) + " 2>&1";
@@ -233,18 +232,24 @@ std::vector<std::map<int, std::string>> MetisPartitioner::partitioneWithGPMetis(
             string newHeader = std::to_string(vertexCount) + ' ' + std::to_string(edgeCountForMetis);
             // string command = "sed -i \"1s/.*/" + newHeader +"/\" /tmp/grf";
             string command = "sed -i \"1s/.*/" + newHeader + "/\" " + this->outputFilePath + "/grf";
-            char *newHeaderChar = new char[command.length() + 1];
-            strcpy(newHeaderChar, command.c_str());
-            headerModify = popen(newHeaderChar, "r");
+            const char *commandStr = command.c_str();
+            pid_t child = fork();
+            if (child == 0) {
+                execl("/bin/sh", "sh", "-c", commandStr, nullptr);
+                _exit(1);
+            }
             partitioneWithGPMetis(to_string(nParts));
         } else if (!result.empty() && result.find("out of bounds") != std::string::npos) {
             vertexCount += 1;
             string newHeader = std::to_string(vertexCount) + ' ' + std::to_string(edgeCountForMetis);
             // string command = "sed -i \"1s/.*/" + newHeader +"/\" /tmp/grf";
             string command = "sed -i \"1s/.*/" + newHeader + "/\" " + this->outputFilePath + "/grf";
-            char *newHeaderChar = new char[command.length() + 1];
-            strcpy(newHeaderChar, command.c_str());
-            headerModify = popen(newHeaderChar, "r");
+            const char *commandStr = command.c_str();
+            pid_t child = fork();
+            if (child == 0) {
+                execl("/bin/sh", "sh", "-c", commandStr, nullptr);
+                _exit(1);
+            }
             partitioneWithGPMetis(to_string(nParts));
             // However, I only found
         } else if (!result.empty() && result.find("However, I only found") != std::string::npos) {
@@ -256,9 +261,12 @@ std::vector<std::map<int, std::string>> MetisPartitioner::partitioneWithGPMetis(
                 result.substr(first + firstDelimiter.length() + 1, last - (first + firstDelimiter.length()) - 2);
             string newHeader = std::to_string(vertexCount) + ' ' + newEdgeSize;
             string command = "sed -i \"1s/.*/" + newHeader + "/\" " + this->outputFilePath + "/grf";
-            char *newHeaderChar = new char[command.length() + 1];
-            strcpy(newHeaderChar, command.c_str());
-            headerModify = popen(newHeaderChar, "r");
+            const char *commandStr = command.c_str();
+            pid_t child = fork();
+            if (child == 0) {
+                execl("/bin/sh", "sh", "-c", commandStr, nullptr);
+                _exit(1);
+            }
             partitioneWithGPMetis(to_string(nParts));
         } else if (!result.empty() && result.find("Timing Information") != std::string::npos) {
             std::string line;
@@ -283,7 +291,7 @@ std::vector<std::map<int, std::string>> MetisPartitioner::partitioneWithGPMetis(
                                   "' ,centralpartitioncount = '" + std::to_string(this->nParts) + "' ,edgecount = '" +
                                   std::to_string(this->edgeCount) + "' WHERE idgraph = '" +
                                   std::to_string(this->graphID) + "'";
-            this->sqlite.runUpdate(sqlStatement);
+            this->sqlite->runUpdate(sqlStatement);
             this->fullFileList.push_back(this->partitionFileList);
             this->fullFileList.push_back(this->centralStoreFileList);
             this->fullFileList.push_back(this->centralStoreDuplicateFileList);
@@ -392,7 +400,7 @@ void MetisPartitioner::createPartitionFiles(std::map<int, int> partMap) {
                               "' WHERE graph_idgraph = '" + std::to_string(this->graphID) + "' AND idpartition = '" +
                               std::to_string(part) + "'";
         dbLock.lock();
-        this->sqlite.runUpdate(sqlStatement);
+        this->sqlite->runUpdate(sqlStatement);
         dbLock.unlock();
     }
 
@@ -644,7 +652,7 @@ void MetisPartitioner::populatePartMaps(std::map<int, int> partMap, int part) {
         std::to_string(partVertexCounts[part]) + "\",\"" + std::to_string(centralPartVertices.size()) + "\",\"" +
         std::to_string(partitionEdgeCount) + "\")";
     dbLock.lock();
-    this->sqlite.runUpdate(sqlStatement);
+    this->sqlite->runUpdate(sqlStatement);
     dbLock.unlock();
     centralPartVertices.clear();
     commonMasterEdgeSet.clear();
@@ -1072,7 +1080,7 @@ void MetisPartitioner::loadContentData(string inputAttributeFilePath, string gra
             cout << sqlStatement << endl;
             cout << "Feature type: " << attrType << endl;
             dbLock.lock();
-            this->sqlite.runUpdate(sqlStatement);
+            this->sqlite->runUpdate(sqlStatement);
             dbLock.unlock();
             if (count == 1) {
                 break;

@@ -21,20 +21,25 @@ limitations under the License.
 using namespace std;
 Logger db_logger;
 
+SQLiteDBInterface::SQLiteDBInterface() {
+    this->databaseLocation = Utils::getJasmineGraphProperty("org.jasminegraph.db.location");
+}
+
+SQLiteDBInterface::SQLiteDBInterface(string databaseLocation) {
+    this->databaseLocation = databaseLocation;
+}
+
 int SQLiteDBInterface::init() {
-    int rc = sqlite3_open(Utils::getJasmineGraphProperty("org.jasminegraph.db.location").c_str(), &database);
-    if (rc) {
-        db_logger.log("Cannot open database: " + string(sqlite3_errmsg(database)), "error");
-        return (-1);
-    } else {
-        db_logger.log("Database opened successfully", "info");
-        return 0;
+    if (sqlite3_open(this->databaseLocation.c_str(), &database)) {
+        db_logger.error("Cannot open database: " + string(sqlite3_errmsg(database)));
+        return -1;
     }
+    db_logger.info("Database opened successfully :" + this->databaseLocation);
+    return 0;
 }
 
 int SQLiteDBInterface::finalize() { return sqlite3_close(database); }
 
-SQLiteDBInterface::SQLiteDBInterface() {}
 
 typedef vector<vector<pair<string, string>>> table_type;
 
@@ -53,18 +58,15 @@ static int callback(void *ptr, int argc, char **argv, char **azColName) {
 
 vector<vector<pair<string, string>>> SQLiteDBInterface::runSelect(std::string query) {
     char *zErrMsg = 0;
-    int rc;
     vector<vector<pair<string, string>>> dbResults;
 
-    rc = sqlite3_exec(database, query.c_str(), callback, &dbResults, &zErrMsg);
-
-    if (rc != SQLITE_OK) {
+    if (sqlite3_exec(database, query.c_str(), callback, &dbResults, &zErrMsg) != SQLITE_OK) {
         db_logger.log("SQL Error: " + string(zErrMsg) + " " + query, "error");
         sqlite3_free(zErrMsg);
     } else {
         db_logger.log("Operation done successfully", "info");
-        return dbResults;
     }
+    return dbResults;
 }
 
 // This function inserts a new row to the DB and returns the last inserted row id
@@ -76,21 +78,19 @@ int SQLiteDBInterface::runInsert(std::string query) {
         db_logger.log("SQL Error: " + string(zErrMsg) + " " + query, "error");
         sqlite3_free(zErrMsg);
         return -1;
-    } else {
-        db_logger.log("Insert operation done successfully", "info");
-        vector<vector<pair<string, string>>> dbResults;
-        string q2 = "SELECT last_insert_rowid();";
-
-        int rc2 = sqlite3_exec(database, q2.c_str(), callback, &dbResults, &zErrMsg);
-
-        if (rc2 != SQLITE_OK) {
-            db_logger.log("SQL Error: " + string(zErrMsg) + " " + query, "error");
-            sqlite3_free(zErrMsg);
-            return -1;
-        } else {
-            return std::stoi(dbResults[0][0].second);
-        }
     }
+    db_logger.log("Insert operation done successfully", "info");
+    vector<vector<pair<string, string>>> dbResults;
+    string q2 = "SELECT last_insert_rowid();";
+
+    int rc2 = sqlite3_exec(database, q2.c_str(), callback, &dbResults, &zErrMsg);
+
+    if (rc2 != SQLITE_OK) {
+        db_logger.log("SQL Error: " + string(zErrMsg) + " " + query, "error");
+        sqlite3_free(zErrMsg);
+        return -1;
+    }
+    return std::stoi(dbResults[0][0].second);
 }
 
 // This function inserts one or more rows of the DB and nothing is returned
@@ -102,7 +102,7 @@ void SQLiteDBInterface::runInsertNoIDReturn(std::string query) {
         db_logger.log("SQL Error: " + string(zErrMsg) + " " + query, "error");
         sqlite3_free(zErrMsg);
     } else {
-        db_logger.log("Insert operation done successfully", "info");
+        db_logger.log("Insert operation done successfully: " + query, "info");
     }
 }
 
@@ -116,7 +116,7 @@ void SQLiteDBInterface::runUpdate(std::string query) {
         db_logger.log("SQL Error: " + string(zErrMsg) + " " + query, "error");
         sqlite3_free(zErrMsg);
     } else {
-        db_logger.log("Update operation done successfully", "info");
+        db_logger.log("Update operation done successfully: " + query, "info");
     }
 }
 

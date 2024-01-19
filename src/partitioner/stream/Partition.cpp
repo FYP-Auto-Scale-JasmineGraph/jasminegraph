@@ -16,6 +16,7 @@
 #include <iostream>
 #include <sstream>
 #include <vector>
+#include <string>
 
 #include "../../util/logger/Logger.h"
 
@@ -50,9 +51,8 @@ std::set<std::string> Partition::getNeighbors(std::string vertex) {
     auto exsist = this->edgeList.find(vertex);
     if (exsist != this->edgeList.end()) {
         return this->edgeList[vertex];
-    } else {
-        return {};
     }
+    return {};
 }
 
 // The number of edges, the cardinality of E, is called the size of graph and denoted by |E|. We usually use m to denote
@@ -61,6 +61,7 @@ double Partition::getEdgesCount() {
     double total = 0;
     std::set<std::string> uniqueEdges;
     for (auto edge : this->edgeList) {
+        std::string vertex1 = edge.first;
         for (auto vertext : edge.second) {
             uniqueEdges.insert(edge.first + vertext);
         }

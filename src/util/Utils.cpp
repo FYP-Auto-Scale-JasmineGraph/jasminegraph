@@ -13,6 +13,7 @@ limitations under the License.
 
 #include "Utils.h"
 
+#include <dirent.h>
 #include <pwd.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -58,10 +59,40 @@ std::vector<std::string> Utils::getFileContent(std::string file) {
     return *vec;
 };
 
+std::string Utils::getFileContentAsString(std::string file) {
+    if (!fileExists(file)) {
+        util_logger.error("File not found : " + file);
+        return "";
+    }
+    std::ifstream in(file);
+    std::string fileContent((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    in.close();
+    return fileContent;
+}
+
+std::string Utils::replaceAll(std::string content, const std::string &oldValue, const std::string &newValue) {
+    size_t pos = 0;
+    while ((pos = content.find(oldValue, pos)) != std::string::npos) {
+        content.replace(pos, oldValue.length(), newValue);
+        pos += newValue.length();
+    }
+    return content;
+}
+
+void Utils::writeFileContent(const std::string &filePath, const std::string &content) {
+    std::ofstream out(filePath);
+    if (!out.is_open()) {
+        util_logger.error("Cannot write to file path: " + filePath);
+        return;
+    }
+    out << content;
+    out.close();
+}
+
 std::string Utils::getJasmineGraphProperty(std::string key) {
     if (Utils::propertiesMap.empty()) {
         std::vector<std::string>::iterator it;
-        vector<std::string> vec = Utils::getFileContent(ROOT_DIR"conf/jasminegraph-server.properties");
+        vector<std::string> vec = Utils::getFileContent(ROOT_DIR "conf/jasminegraph-server.properties");
         it = vec.begin();
 
         for (it = vec.begin(); it < vec.end(); it++) {
@@ -76,17 +107,17 @@ std::string Utils::getJasmineGraphProperty(std::string key) {
             }
         }
     }
-    unordered_map<std::string, std::string>::iterator it = Utils::propertiesMap.find(key);
+    auto it = Utils::propertiesMap.find(key);
     if (it != Utils::propertiesMap.end()) {
         return it->second;
     }
-    return NULL;
+    return "";
 }
 
-std::vector<Utils::worker> Utils::getWorkerList(SQLiteDBInterface sqlite) {
+std::vector<Utils::worker> Utils::getWorkerList(SQLiteDBInterface *sqlite) {
     vector<Utils::worker> workerVector;
     std::vector<vector<pair<string, string>>> v =
-        sqlite.runSelect("SELECT idworker,user,ip,server_port,server_data_port FROM worker;");
+        sqlite->runSelect("SELECT idworker,user,ip,server_port,server_data_port FROM worker;");
     for (int i = 0; i < v.size(); i++) {
         string workerID = v[i][0].second;
         string user = v[i][1].second;
@@ -164,48 +195,38 @@ void Utils::createDirectory(const std::string dirName) {
     mkdir(dirName.c_str(), 0777);
 }
 
-std::vector<std::string> Utils::getListOfFilesInDirectory(const std::string dirName) {
-    char buffer[128];
+std::vector<std::string> Utils::getListOfFilesInDirectory(std::string dirName) {
     std::vector<string> results;
-    std::string result = "";
-    std::string command = "ls -l " + dirName;
-    char *commandChar = new char[command.length() + 1];
-    strcpy(commandChar, command.c_str());
-    FILE *input = popen(commandChar, "r");
-    if (input) {
-        while (!feof(input)) {
-            if (fgets(buffer, 128, input) != NULL) {
-                result.append(buffer);
-            }
-        }
-        pclose(input);
-        if (!result.empty()) {
-            std::vector<std::string> vec = split(result, '\n');
-            for (std::vector<std::string>::iterator it = vec.begin(); it != vec.end(); ++it) {
-                std::string line = it->c_str();
-                if (line.back() == '\r') {
-                    line.pop_back();
-                }
-                if (line.rfind("-", 0) == 0) {
-                    std::string file = line.substr(line.find_last_of(' ') + 1);
-                    results.push_back(file);
-                }
-            }
-        }
-    } else {
-        perror("popen");
-        // handle error
+    DIR *d = opendir(dirName.c_str());
+    if (!d) {
+        util_logger.error("Error opening directory " + dirName);
+        return results;
     }
-
+    if (dirName.back() != '/') {
+        dirName.append("/");
+    }
+    const struct dirent *dir;
+    while ((dir = readdir(d)) != nullptr) {
+        const char *filename = dir->d_name;
+        string fnamestr = filename;
+        struct stat sb;
+        string path = dirName + fnamestr;
+        if (stat(path.c_str(), &sb) != 0) {
+            util_logger.warn("stat() failed for " + path + " => skipping");
+            continue;
+        }
+        if (S_ISREG(sb.st_mode)) {
+            results.push_back(fnamestr);
+        }
+    }
+    (void)closedir(d);
     return results;
 }
 
 /**
- * This method deletes a directory with all its content
+ * This method deletes a directory with all its content if the user has permission
  * @param dirName
  */
-// TODO :: find a possible solution to handle the permission denied error when trying to delete a protected directory.
-// popen does not work either
 int Utils::deleteDirectory(const std::string dirName) {
     string command = "rm -rf " + dirName;
     int status = system(command.c_str());
@@ -227,7 +248,6 @@ bool Utils::is_number(const std::string &compareString) {
  * @return
  */
 std::string Utils::getFileName(std::string filePath) {
-    // FIXME: Can file path separator be '\' on Linux?
     std::string filename = filePath.substr(filePath.find_last_of("/\\") + 1);
     return filename;
 }
@@ -237,7 +257,7 @@ std::string Utils::getJasmineGraphHome() {
     std::string jasminegraph_home;
 
     char const *temp = getenv(test.c_str());
-    if (temp != NULL) {
+    if (temp != nullptr) {
         jasminegraph_home = std::string(temp);
     }
     if (jasminegraph_home.empty()) {
@@ -276,7 +296,6 @@ int Utils::copyFile(const std::string sourceFilePath, const std::string destinat
  * @return
  */
 int Utils::getFileSize(std::string filePath) {
-    // const clock_t begin_time = clock();
     ifstream file(filePath.c_str(), ifstream::in | ifstream::binary);
     if (!file.is_open()) {
         return -1;
@@ -284,7 +303,6 @@ int Utils::getFileSize(std::string filePath) {
     file.seekg(0, ios::end);
     int fileSize = file.tellg();
     file.close();
-    // std::cout << "TIME FOR READ : "<<float( clock () - begin_time ) /  CLOCKS_PER_SEC << std::endl;
     return fileSize;
 }
 
@@ -330,14 +348,14 @@ int Utils::unzipFile(std::string filePath, std::string mode) {
  * This method checks if a host exists in JasmineGraph MetaBD.
  * This method uses the name and ip of the host.
  */
-bool Utils::hostExists(string name, string ip, std::string workerPort, SQLiteDBInterface sqlite) {
+bool Utils::hostExists(string name, string ip, std::string workerPort, SQLiteDBInterface *sqlite) {
     bool result = true;
     string stmt = "SELECT COUNT( * ) FROM worker WHERE name LIKE '" + name + "' AND ip LIKE '" + ip +
                   "' AND server_port LIKE '" + workerPort + "';";
     if (ip == "") {
         stmt = "SELECT COUNT( * ) FROM worker WHERE name LIKE '" + name + "';";
     }
-    std::vector<vector<pair<string, string>>> v = sqlite.runSelect(stmt);
+    std::vector<vector<pair<string, string>>> v = sqlite->runSelect(stmt);
     int count = std::stoi(v[0][0].second);
     if (count == 0) {
         result = false;
@@ -345,10 +363,10 @@ bool Utils::hostExists(string name, string ip, std::string workerPort, SQLiteDBI
     return result;
 }
 
-string Utils::getHostID(string hostName, SQLiteDBInterface sqlite) {
+string Utils::getHostID(string hostName, SQLiteDBInterface *sqlite) {
     map<string, string> hostIDMap;
     std::vector<vector<pair<string, string>>> v =
-        sqlite.runSelect("SELECT idhost FROM host where name LIKE '" + hostName + "';");
+        sqlite->runSelect("SELECT idhost FROM host where name LIKE '" + hostName + "';");
     string id = v[0][0].second;
 
     return id;
@@ -380,10 +398,11 @@ int Utils::unzipDirectory(std::string filePath) {
     return status;
 }
 
-void Utils::assignPartitionsToWorkers(int numberOfWorkers, SQLiteDBInterface sqlite) {
-    sqlite.runUpdate("DELETE FROM worker_has_partition");
+void Utils::assignPartitionsToWorkers(int numberOfWorkers, SQLiteDBInterface *sqlite) {
+    sqlite->runUpdate("DELETE FROM worker_has_partition");
 
-    std::vector<vector<pair<string, string>>> v = sqlite.runSelect("SELECT idpartition, graph_idgraph FROM partition;");
+    std::vector<vector<pair<string, string>>> v =
+        sqlite->runSelect("SELECT idpartition, graph_idgraph FROM partition;");
     int workerCounter = 0;
     string valueString;
     string sqlStatement =
@@ -407,16 +426,16 @@ void Utils::assignPartitionsToWorkers(int numberOfWorkers, SQLiteDBInterface sql
         }
         valueString = valueString.substr(0, valueString.length() - 1);
         sqlStatement = sqlStatement + valueString;
-        sqlite.runInsert(sqlStatement);
+        sqlite->runInsert(sqlStatement);
     }
 }
 
-void Utils::updateSLAInformation(PerformanceSQLiteDBInterface perfSqlite, std::string graphId, int partitionCount,
+void Utils::updateSLAInformation(PerformanceSQLiteDBInterface *perfSqlite, std::string graphId, int partitionCount,
                                  long newSlaValue, std::string command, std::string category) {
     std::string categoryQuery =
         "SELECT id from sla_category where command='" + command + "' and category='" + category + "'";
 
-    std::vector<vector<pair<string, string>>> categoryResults = perfSqlite.runSelect(categoryQuery);
+    std::vector<vector<pair<string, string>>> categoryResults = perfSqlite->runSelect(categoryQuery);
 
     if (categoryResults.size() == 1) {
         string slaCategoryId = categoryResults[0][0].second;
@@ -425,7 +444,7 @@ void Utils::updateSLAInformation(PerformanceSQLiteDBInterface perfSqlite, std::s
                             "' and partition_count='" + std::to_string(partitionCount) + "' and id_sla_category='" +
                             slaCategoryId + "';";
 
-        std::vector<vector<pair<string, string>>> results = perfSqlite.runSelect(query);
+        std::vector<vector<pair<string, string>>> results = perfSqlite->runSelect(query);
 
         if (results.size() == 1) {
             std::string slaId = results[0][0].second;
@@ -443,7 +462,7 @@ void Utils::updateSLAInformation(PerformanceSQLiteDBInterface perfSqlite, std::s
                 std::string updateQuery = "UPDATE graph_sla set sla_value='" + std::to_string(newSla) + "', attempt='" +
                                           std::to_string(attempts) + "' where id = '" + slaId + "'";
 
-                perfSqlite.runUpdate(updateQuery);
+                perfSqlite->runUpdate(updateQuery);
             }
         } else {
             std::string insertQuery =
@@ -451,7 +470,7 @@ void Utils::updateSLAInformation(PerformanceSQLiteDBInterface perfSqlite, std::s
                 slaCategoryId + "','" + graphId + "'," + std::to_string(partitionCount) + "," +
                 std::to_string(newSlaValue) + ",0);";
 
-            perfSqlite.runInsert(insertQuery);
+            perfSqlite->runInsert(insertQuery);
         }
     } else {
         util_logger.log("Invalid SLA " + category + " for " + command + " command", "error");
@@ -527,6 +546,8 @@ int Utils::connect_wrapper(int sock, const sockaddr *addr, socklen_t slen) {
             return 0;
         }
     } while (retry++ < 4);
+    util_logger.error("Error connecting to " + string(inet_ntoa(((const struct sockaddr_in *)addr)->sin_addr)) + ":" +
+                      to_string(ntohs(((const struct sockaddr_in *)addr)->sin_port)));
     return -1;
 }
 
@@ -559,9 +580,7 @@ bool Utils::send_wrapper(int connFd, const char *buf, size_t size) {
     return true;
 }
 
-bool Utils::send_str_wrapper(int connFd, std::string str) {
-    return send_wrapper(connFd, str.c_str(), str.length());
-}
+bool Utils::send_str_wrapper(int connFd, std::string str) { return send_wrapper(connFd, str.c_str(), str.length()); }
 
 std::string Utils::getCurrentTimestamp() {
     auto now = chrono::system_clock::now();
@@ -572,4 +591,49 @@ std::string Utils::getCurrentTimestamp() {
     timestamp << put_time(&tm_time, "%y%m%d_%H%M%S");  // Format can be customized
 
     return timestamp.str();
+}
+
+inline json parse_scalar(const YAML::Node &node) {
+    int i;
+    double d;
+    bool b;
+    std::string s;
+
+    // Check whether the node is quoted. parse it as a string
+    if (node.Tag() == "!") {
+        s = node.as<std::string>();
+        return s;
+    }
+
+    if (YAML::convert<int>::decode(node, i)) return i;
+    if (YAML::convert<double>::decode(node, d)) return d;
+    if (YAML::convert<bool>::decode(node, b)) return b;
+    if (YAML::convert<std::string>::decode(node, s)) return s;
+
+    return nullptr;
+}
+
+inline json yaml2json(const YAML::Node &root) {
+    json j{};
+
+    switch (root.Type()) {
+        case YAML::NodeType::Null:
+            break;
+        case YAML::NodeType::Scalar:
+            return parse_scalar(root);
+        case YAML::NodeType::Sequence:
+            for (auto &&node : root) j.emplace_back(yaml2json(node));
+            break;
+        case YAML::NodeType::Map:
+            for (auto &&it : root) j[it.first.as<std::string>()] = yaml2json(it.second);
+            break;
+        default:
+            break;
+    }
+    return j;
+}
+
+std::string Utils::getJsonStringFromYamlFile(const std::string &yamlFile) {
+    YAML::Node yamlNode = YAML::LoadFile(yamlFile);
+    return to_string(yaml2json(yamlNode));
 }

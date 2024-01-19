@@ -25,7 +25,8 @@ Logger backend_logger;
 void *backendservicesesion(void *dummyPt) {
     backendservicesessionargs *sessionargs = (backendservicesessionargs *)dummyPt;
     int connFd = sessionargs->connFd;
-    SQLiteDBInterface sqLiteDbInterface = sessionargs->sqlite;
+    SQLiteDBInterface *sqLiteDbInterface = sessionargs->sqlite;
+    delete sessionargs;
     backend_logger.log("Thread No: " + to_string(pthread_self()), "info");
     char data[301];
     bzero(data, 301);
@@ -80,7 +81,7 @@ void *backendservicesesion(void *dummyPt) {
             std::string updateQuery =
                 "update worker set status='started' where ip='" + strArr[0] + "' and server_port='" + strArr[1] + "';";
 
-            sqLiteDbInterface.runUpdate(updateQuery);
+            sqLiteDbInterface->runUpdate(updateQuery);
             break;
 
         } else {
@@ -92,7 +93,7 @@ void *backendservicesesion(void *dummyPt) {
     return NULL;
 }
 
-JasmineGraphBackend::JasmineGraphBackend(SQLiteDBInterface db, int numberOfWorkers) {
+JasmineGraphBackend::JasmineGraphBackend(SQLiteDBInterface *db, int numberOfWorkers) {
     this->sqlite = db;
     this->workerCount = numberOfWorkers;
 }
@@ -121,10 +122,8 @@ int JasmineGraphBackend::run() {
     svrAdd.sin_port = htons(portNo);
 
     int yes = 1;
-
     if (setsockopt(listenFd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == -1) {
         perror("setsockopt");
-        exit(1);
     }
 
     // bind socket
@@ -134,13 +133,10 @@ int JasmineGraphBackend::run() {
     }
 
     listen(listenFd, 10);
-    pthread_t threadA[workerCount];
 
     len = sizeof(clntAdd);
 
-    int noThread = 0;
-
-    while (noThread < workerCount) {
+    while (true) {
         backend_logger.log("Backend Listening", "info");
 
         // this is where client connects. svr will hang in this mode until client conn
@@ -148,22 +144,15 @@ int JasmineGraphBackend::run() {
 
         if (connFd < 0) {
             backend_logger.log("Cannot accept connection", "error");
-            return 0;
-        } else {
-            backend_logger.log("Connection successful", "info");
+            continue;
         }
-
-        struct backendservicesessionargs backendservicesessionargs1;
-        backendservicesessionargs1.sqlite = this->sqlite;
-        backendservicesessionargs1.connFd = connFd;
-
-        pthread_create(&threadA[noThread], NULL, backendservicesesion, &backendservicesessionargs1);
-
-        noThread++;
+        backend_logger.log("Connection successful", "info");
+        backendservicesessionargs *sessionargs = new backendservicesessionargs;
+        sessionargs->sqlite = this->sqlite;
+        sessionargs->connFd = connFd;
+        pthread_t pt;
+        pthread_create(&pt, NULL, backendservicesesion, sessionargs);
     }
 
-    for (int i = 0; i < noThread; i++) {
-        pthread_join(threadA[i], NULL);
-    }
     return 1;
 }

@@ -31,7 +31,6 @@ class JasmineGraphInstance {
     static const int BUFFER_SIZE = 128;
 
  public:
-    SQLiteDBInterface sqlite;
     int start_running(string profile, string hostName, string masterHost, int serverPort, int serverDataPort,
                       string enableNmon);
 
@@ -57,8 +56,6 @@ class JasmineGraphInstance {
     JasmineGraphInstanceService *instanceService;
     JasmineGraphInstanceFileTransferService *ftpService;
     static bool sendFileThroughService(std::string host, int dataPort, std::string fileName, std::string filePath);
-
-    static void logLoadAverage(std::string name);
 };
 
 #endif  // JASMINEGRAPH_JASMINEGRAPHINSTANCE_H
