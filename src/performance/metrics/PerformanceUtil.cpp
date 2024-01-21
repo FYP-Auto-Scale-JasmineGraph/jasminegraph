@@ -201,15 +201,12 @@ static void send_job(std::string response_string, std::string job_group_name, st
 
     curl = curl_easy_init();
     if (curl) {
-        // std::string hostPGAddr = pushGatewayAddr + "hostPerfData_" + to_string(port);
         std::string hostPGAddr = pushGatewayAddr + job_group_name + addr;
-        // curl_easy_setopt(curl, CURLOPT_URL, "http://192.168.8.150:9091/metrics/job/hostPerfData");
         curl_easy_setopt(curl, CURLOPT_URL, hostPGAddr.c_str());
 
         // Set the callback function to handle the response data
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_string);
-        // std::string job_data = "memory_consumption " + memoryConsumption + "\n";
         std::string job_data = metric_name + " " + metric_value + "\n";
         const char* data = job_data.c_str();
 
