@@ -203,6 +203,7 @@ int StatisticCollector::getSocketCount() {
         if (filename[0] < '0' || '9' < filename[0]) continue;
         sprintf(path, "/proc/self/fd/%s", filename);
         size_t len = readlink(path, link_buf, sizeof(link_buf) - 1);
+        if (len < 0) continue;
         link_buf[len] = 0;
         if (len > 0 && strncmp("socket:", link_buf, 7) == 0) {
             count++;
