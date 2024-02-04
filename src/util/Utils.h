@@ -156,7 +156,13 @@ class Utils {
     static bool send_str_wrapper(int connFd, std::string str);
 
     static std::string getCurrentTimestamp();
+    
     static std::string getJsonStringFromYamlFile(const std::string& yamlFile);
+
+    static int createDatabaseFromDDL(const char* dbLocation, const char* ddlFileLocation);
+
+    static std::string send_job(std::string job_group_name, std::string metric_name,
+                                std::string metric_value);
 };
 
 #endif  // JASMINEGRAPH_UTILS_H

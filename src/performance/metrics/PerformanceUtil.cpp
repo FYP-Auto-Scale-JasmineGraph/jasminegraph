@@ -13,8 +13,6 @@ limitations under the License.
 
 #include "PerformanceUtil.h"
 
-#include <curl/curl.h>
-
 using namespace std::chrono;
 std::map<std::string, std::vector<ResourceUsageInfo>> resourceUsageMap;
 std::string pushGatewayAddr = Utils::getJasmineGraphProperty("org.jasminegraph.collector.pushgateway");
@@ -193,39 +191,6 @@ static size_t write_callback(void* contents, size_t size, size_t nmemb, std::str
     return totalSize;
 }
 
-static void send_job(std::string response_string, std::string job_group_name, std::string metric_name,
-                     std::string metric_value, std::string addr) {
-    CURL* curl;
-    CURLcode res;
-    // std::string response_host_perf_data;
-
-    curl = curl_easy_init();
-    if (curl) {
-        std::string hostPGAddr = pushGatewayAddr + job_group_name + addr;
-        curl_easy_setopt(curl, CURLOPT_URL, hostPGAddr.c_str());
-
-        // Set the callback function to handle the response data
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_string);
-        std::string job_data = metric_name + " " + metric_value + "\n";
-        const char* data = job_data.c_str();
-
-        curl_slist* headers = NULL;
-        headers = curl_slist_append(headers, "Content-Type: application/x-prometheus-remote-write-v1");
-        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
-        curl_easy_setopt(curl, CURLOPT_POST, 1);
-
-        res = curl_easy_perform(curl);
-        if (res != CURLE_OK) {
-            std::cerr << "cURL failed: " << curl_easy_strerror(res) << std::endl;
-        }
-
-        curl_easy_cleanup(curl);
-    }
-}
-
 void PerformanceUtil::collectRemotePerformanceData(std::string host, int port, std::string isVMStatManager,
                                                    std::string isResourceAllocationRequired, std::string hostId,
                                                    std::string placeId) {
@@ -321,9 +286,8 @@ void PerformanceUtil::collectRemotePerformanceData(std::string host, int port, s
 
         perfDb->runInsert(vmPerformanceSql);
 
-        std::string response_host_perf_data;
-        send_job(response_host_perf_data, "hostPerfDataO_", "memory_consumption", memoryConsumption, to_string(port));
-        send_job(response_host_perf_data, "hostPerfDataO_", "cpu_usage", cpuUsage, to_string(port));
+        Utils::send_job("hostPerfDataO_" + to_string(port), "memory_consumption", memoryConsumption);
+        Utils::send_job("hostPerfDataO_" + to_string(port), "cpu_usage", cpuUsage);
 
         if (isResourceAllocationRequired == "true") {
             std::string totalMemory = strArr[6];
@@ -340,9 +304,8 @@ void PerformanceUtil::collectRemotePerformanceData(std::string host, int port, s
 
     perfDb->runInsert(placePerfSql);
 
-    std::string response_place_perf_data;
-    send_job(response_place_perf_data, "placePerfDataO_", "memory_usage", memoryUsage, to_string(port));
-    send_job(response_place_perf_data, "placePerfDataO_", "cpu_usage", cpuUsage, to_string(port));
+    Utils::send_job("placePerfDataO_" + to_string(port), "memory_usage", memoryUsage);
+    Utils::send_job("placePerfDataO_" + to_string(port), "cpu_usage", cpuUsage);
 }
 
 void PerformanceUtil::collectLocalPerformanceData(std::string isVMStatManager, std::string isResourceAllocationRequired,
@@ -372,9 +335,8 @@ void PerformanceUtil::collectLocalPerformanceData(std::string isVMStatManager, s
 
         perfDb->runInsert(vmPerformanceSql);
 
-        std::string response_local_perf_data;
-        send_job(response_local_perf_data, "localPerfDataO_", "total_memory_usage", totalMemoryUsed, hostId);
-        send_job(response_local_perf_data, "localPerfDataO_", "total_CPU_usage", totalCPUUsage, hostId);
+        Utils::send_job("localPerfDataO_" + hostId, "total_memory_usage", totalMemoryUsed);
+        Utils::send_job("localPerfDataO_" + hostId, "total_CPU_usage", totalCPUUsage);
 
         if (isResourceAllocationRequired == "true") {
             std::string totalMemory = strArr[2];
@@ -392,9 +354,8 @@ void PerformanceUtil::collectLocalPerformanceData(std::string isVMStatManager, s
 
     perfDb->runInsert(placePerfSql);
 
-    std::string response_place_perf_data_local;
-    send_job(response_place_perf_data_local, "placePerfDataLocalO_", "memory_usage", to_string(memoryUsage), hostId);
-    send_job(response_place_perf_data_local, "placePerfDataLocalO_", "cpu_usage", to_string(cpuUsage), hostId);
+    Utils::send_job("placePerfDataLocalO_" + hostId, "memory_usage", to_string(memoryUsage));
+    Utils::send_job("placePerfDataLocalO_" + hostId, "cpu_usage", to_string(cpuUsage));
 }
 
 int PerformanceUtil::collectRemoteSLAResourceUtilization(std::string host, int port, std::string isVMStatManager,
@@ -935,36 +896,7 @@ void PerformanceUtil::logLoadAverage() {
     double currentLoadAverage = statisticCollector.getLoadAverage();
 
     std::cout << "###PERF### CURRENT LOAD: " + std::to_string(currentLoadAverage) << std::endl;
-
-    CURL* curl;
-    CURLcode res;
-    std::string response_load_avg;
-
-    curl = curl_easy_init();
-    if (curl) {
-        // curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-        curl_easy_setopt(curl, CURLOPT_URL, (pushGatewayAddr + "loadAverage").c_str());
-
-        // Set the callback function to handle the response data
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_load_avg);
-        std::string job_data = "load_average " + std::to_string(currentLoadAverage) + "\n";
-        const char* data = job_data.c_str();
-
-        curl_slist* headers = NULL;
-        headers = curl_slist_append(headers, "Content-Type: application/x-prometheus-remote-write-v1");
-        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
-        curl_easy_setopt(curl, CURLOPT_POST, 1);
-
-        res = curl_easy_perform(curl);
-        if (res != CURLE_OK) {
-            std::cerr << "cURL failed: " << curl_easy_strerror(res) << std::endl;
-        }
-
-        curl_easy_cleanup(curl);
-    }
+    Utils::send_job("loadAverage", "load_average", std::to_string(currentLoadAverage));
 }
 
 void PerformanceUtil::updateResourceConsumption(PerformanceSQLiteDBInterface* performanceDb, std::string graphId,
@@ -1010,39 +942,11 @@ void PerformanceUtil::updateResourceConsumption(PerformanceSQLiteDBInterface* pe
                 ResourceUsageInfo usageInfo = *usageIterator;
 
                 valuesString += "('" + graphSlaId + "','" + placeId + "', '','" + usageInfo.loadAverage + "','" +
-                                usageInfo.elapsedTime + "'),";
+                    usageInfo.elapsedTime + "'),";
 
-                CURL* curl;
-                CURLcode res;
-                std::string response_load_avg_sla;
-
-                curl = curl_easy_init();
-                if (curl) {
-                    // curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-                    curl_easy_setopt(curl, CURLOPT_URL, (pushGatewayAddr + "loadAverageSLA").c_str());
-
-                    // Set the callback function to handle the response data
-                    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-                    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_load_avg_sla);
-                    std::string job_data = "load_average " + usageInfo.loadAverage + "\n";
-                    const char* data = job_data.c_str();
-
-                    curl_slist* headers = NULL;
-                    headers = curl_slist_append(headers, "Content-Type: application/x-prometheus-remote-write-v1");
-                    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-
-                    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
-                    curl_easy_setopt(curl, CURLOPT_POST, 1);
-
-                    res = curl_easy_perform(curl);
-                    if (res != CURLE_OK) {
-                        std::cerr << "cURL failed: " << curl_easy_strerror(res) << std::endl;
-                    }
-
-                    curl_easy_cleanup(curl);
-                }
+                //FIXME(Aruna): haven't done this per host basis
+                Utils::send_job("loadAverageSLA", "load_average", usageInfo.loadAverage);
             }
-
             valuesString = valuesString.substr(0, valuesString.length() - 1);
             slaPerfSql = slaPerfSql + valuesString;
 
@@ -1106,35 +1010,7 @@ void PerformanceUtil::updateRemoteResourceConsumption(PerformanceSQLiteDBInterfa
                                     std::to_string(elapsedTime * 1000) + "'),";
                     elapsedTime += 5;
 
-                    CURL* curl;
-                    CURLcode res;
-                    std::string response_load_avg_sla_rem;
-
-                    curl = curl_easy_init();
-                    if (curl) {
-                        // curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-                        curl_easy_setopt(curl, CURLOPT_URL, (pushGatewayAddr + "loadAverageSLARem").c_str());
-
-                        // Set the callback function to handle the response data
-                        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-                        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_load_avg_sla_rem);
-                        std::string job_data = "load_average_rem " + loadAverage + "\n";
-                        const char* data = job_data.c_str();
-
-                        curl_slist* headers = NULL;
-                        headers = curl_slist_append(headers, "Content-Type: application/x-prometheus-remote-write-v1");
-                        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-
-                        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
-                        curl_easy_setopt(curl, CURLOPT_POST, 1);
-
-                        res = curl_easy_perform(curl);
-                        if (res != CURLE_OK) {
-                            std::cerr << "cURL failed: " << curl_easy_strerror(res) << std::endl;
-                        }
-
-                        curl_easy_cleanup(curl);
-                    }
+                    Utils::send_job("loadAverageSLARem", "load_average_rem", loadAverage);
                 }
 
                 valuesString = valuesString.substr(0, valuesString.length() - 1);
