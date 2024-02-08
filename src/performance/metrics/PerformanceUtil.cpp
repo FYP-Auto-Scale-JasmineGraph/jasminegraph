@@ -13,9 +13,11 @@ limitations under the License.
 
 #include "PerformanceUtil.h"
 
+#include <curl/curl.h>
+#include <jsoncpp/json/json.h>
+
 using namespace std::chrono;
 std::map<std::string, std::vector<ResourceUsageInfo>> resourceUsageMap;
-std::string pushGatewayAddr = Utils::getJasmineGraphProperty("org.jasminegraph.collector.pushgateway");
 
 static size_t write_callback(void* contents, size_t size, size_t nmemb, std::string* output);
 
@@ -35,51 +37,85 @@ void PerformanceUtil::init() {
     }
 }
 
-int PerformanceUtil::collectPerformanceStatistics() {
-    vector<std::string> hostList = Utils::getHostListFromProperties();
-    int hostListSize = hostList.size();
-    int counter = 0;
-    std::vector<std::future<long>> intermRes;
-    PlacesToNodeMapper placesToNodeMapper;
+static size_t write_callback(void* contents, size_t size, size_t nmemb, std::string* output) {
+    size_t totalSize = size * nmemb;
+    output->append(static_cast<char*>(contents), totalSize);
+    return totalSize;
+}
 
-    std::string placeLoadQuery =
-        "select ip, user, server_port, is_master, is_host_reporter,host_idhost,idplace from place";
-    std::vector<vector<pair<string, string>>> placeList = perfDb->runSelect(placeLoadQuery);
-    std::vector<vector<pair<string, string>>>::iterator placeListIterator;
+static std::map<std::string, std::string> getMetricMap(std::string metricName){
+    std::map<std::string, std::string> map;
+    CURL* curl;
+    CURLcode res;
+    std::string response_cpu_usages;
 
-    for (placeListIterator = placeList.begin(); placeListIterator != placeList.end(); ++placeListIterator) {
-        vector<pair<string, string>> place = *placeListIterator;
-        std::string requestResourceAllocation = "false";
+    curl = curl_easy_init();
+    if (curl) {
+        std::string pushGatewayAddr = "http://192.168.8.150:9090/api/v1/query?query=" + metricName;
+        curl_easy_setopt(curl, CURLOPT_URL, pushGatewayAddr.c_str());
 
-        std::string ip = place.at(0).second;
-        std::string user = place.at(1).second;
-        std::string serverPort = place.at(2).second;
-        std::string isMaster = place.at(3).second;
-        std::string isHostReporter = place.at(4).second;
-        std::string hostId = place.at(5).second;
-        std::string placeId = place.at(6).second;
+        // Set the callback function to handle the response data
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_cpu_usages);
+        curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
+        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+        curl_easy_setopt(curl, CURLOPT_FORBID_REUSE, 1L);
 
-        if (isHostReporter.find("true") != std::string::npos) {
-            std::string hostSearch = "select total_cpu_cores,total_memory from host where idhost='" + hostId + "'";
-            std::vector<vector<pair<string, string>>> hostAllocationList = perfDb->runSelect(hostSearch);
-
-            vector<pair<string, string>> firstHostAllocation = hostAllocationList.at(0);
-
-            std::string totalCPUCores = firstHostAllocation.at(0).second;
-            std::string totalMemory = firstHostAllocation.at(1).second;
-
-            if (totalCPUCores.empty() || totalMemory.empty()) {
-                requestResourceAllocation = "true";
+        res = curl_easy_perform(curl);
+        if (res != CURLE_OK) {
+            std::cerr << "cURL failed: " << curl_easy_strerror(res) << std::endl;
+        } else{
+            std::cout << response_cpu_usages << std::endl;
+            Json::Value root;
+            Json::Reader reader;
+            reader.parse(response_cpu_usages, root);
+            const Json::Value results = root["data"]["result"];
+            Json::Value currentExportedJobName;
+            for(int i=1; i<results.size(); i++){
+                currentExportedJobName = results[i]["metric"]["exported_job"];
+                map[(currentExportedJobName.asString().c_str())] = (results[i]["value"][1]).asString();
             }
-        }
-
-        if (isMaster.find("true") != std::string::npos) {
-            collectLocalPerformanceData(isHostReporter, requestResourceAllocation, hostId, placeId);
-        } else {
-            collectRemotePerformanceData(ip, atoi(serverPort.c_str()), isHostReporter, requestResourceAllocation,
-                                         hostId, placeId);
+            curl_easy_cleanup(curl);
         }
     }
+
+    return map;
+}
+
+int PerformanceUtil::collectPerformanceStatistics() { 
+    long memoryUsage = StatisticCollector::getMemoryUsageByProcess();
+    Utils::send_job("WorkerPerfData", "memory_usage", std::to_string(memoryUsage));
+
+    double cpuUsage = StatisticCollector::getCpuUsage();
+    Utils::send_job("WorkerPerfData", "cpu_usage", std::to_string(cpuUsage));
+
+    int threadCount = StatisticCollector::getThreadCount();
+    Utils::send_job("HostPerfData", "thread_count", std::to_string(threadCount));
+
+    long totalSwapSpace = StatisticCollector::getTotalSwapSpace();
+    Utils::send_job("HostPerfData", "total_swap_space", std::to_string(totalSwapSpace));
+
+    long usedSwapSpace = StatisticCollector::getUsedSwapSpace();
+    Utils::send_job("HostPerfData", "used_swap_space", std::to_string(usedSwapSpace));
+
+    long rxBytes = StatisticCollector::getRXBytes();
+    Utils::send_job("WorkerPerfData", "rx_bytes", std::to_string(rxBytes));
+
+    long txBytes = StatisticCollector::getTXBytes();
+    Utils::send_job("WorkerPerfData", "tx_bytes", std::to_string(txBytes));
+
+    int socketCount = StatisticCollector::getSocketCount();
+    Utils::send_job("HostPerfData", "socket_count", std::to_string(socketCount));
+
+    long totalMemoryUsage = StatisticCollector::getTotalMemoryUsage();
+    Utils::send_job("HostPerfData", "total_memory", std::to_string(totalMemoryUsage));
+
+    map<std::string, std::string> cpuUsages = getMetricMap("cpu_usage");
+    std::cout << cpuUsages["WorkerPerfData_-1"] << std::endl;
+    std::cout << cpuUsages["WorkerPerfData_0"] << std::endl;
+    std::cout << cpuUsages["WorkerPerfData_1"] << std::endl;
+    std::cout << cpuUsages["WorkerPerfData_2"] << std::endl;
+    std::cout << cpuUsages["WorkerPerfData_3"] << std::endl;
 
     return 0;
 }
@@ -185,12 +221,6 @@ std::vector<ResourceConsumption> PerformanceUtil::retrieveCurrentResourceUtiliza
     return placeResourceConsumptionList;
 }
 
-static size_t write_callback(void* contents, size_t size, size_t nmemb, std::string* output) {
-    size_t totalSize = size * nmemb;
-    output->append(static_cast<char*>(contents), totalSize);
-    return totalSize;
-}
-
 void PerformanceUtil::collectRemotePerformanceData(std::string host, int port, std::string isVMStatManager,
                                                    std::string isResourceAllocationRequired, std::string hostId,
                                                    std::string placeId) {
@@ -286,9 +316,6 @@ void PerformanceUtil::collectRemotePerformanceData(std::string host, int port, s
 
         perfDb->runInsert(vmPerformanceSql);
 
-        Utils::send_job("hostPerfDataO_" + to_string(port), "memory_consumption", memoryConsumption);
-        Utils::send_job("hostPerfDataO_" + to_string(port), "cpu_usage", cpuUsage);
-
         if (isResourceAllocationRequired == "true") {
             std::string totalMemory = strArr[6];
             std::string totalCores = strArr[7];
@@ -303,18 +330,12 @@ void PerformanceUtil::collectRemotePerformanceData(std::string host, int port, s
                           placeId + "','" + memoryUsage + "','" + cpuUsage + "','" + processTime + "')";
 
     perfDb->runInsert(placePerfSql);
-
-    Utils::send_job("placePerfDataO_" + to_string(port), "memory_usage", memoryUsage);
-    Utils::send_job("placePerfDataO_" + to_string(port), "cpu_usage", cpuUsage);
 }
 
 void PerformanceUtil::collectLocalPerformanceData(std::string isVMStatManager, std::string isResourceAllocationRequired,
                                                   std::string hostId, std::string placeId) {
-    StatisticCollector statisticCollector;
-    statisticCollector.init();
-
-    int memoryUsage = statisticCollector.getMemoryUsageByProcess();
-    double cpuUsage = statisticCollector.getCpuUsage();
+    int memoryUsage = StatisticCollector::getMemoryUsageByProcess();
+    double cpuUsage = StatisticCollector::getCpuUsage();
 
     auto executedTime = std::chrono::system_clock::now();
     std::time_t reportTime = std::chrono::system_clock::to_time_t(executedTime);
@@ -323,7 +344,7 @@ void PerformanceUtil::collectLocalPerformanceData(std::string isVMStatManager, s
 
     if (isVMStatManager.find("true") != std::string::npos) {
         std::string vmLevelStatistics =
-            statisticCollector.collectVMStatistics(isVMStatManager, isResourceAllocationRequired);
+            StatisticCollector::collectVMStatistics(isVMStatManager, isResourceAllocationRequired);
         std::vector<std::string> strArr = Utils::split(vmLevelStatistics, ',');
 
         string totalMemoryUsed = strArr[0];
@@ -334,9 +355,6 @@ void PerformanceUtil::collectLocalPerformanceData(std::string isVMStatManager, s
             reportTimeString + "','" + totalMemoryUsed + "','" + totalCPUUsage + "','" + hostId + "')";
 
         perfDb->runInsert(vmPerformanceSql);
-
-        Utils::send_job("localPerfDataO_" + hostId, "total_memory_usage", totalMemoryUsed);
-        Utils::send_job("localPerfDataO_" + hostId, "total_CPU_usage", totalCPUUsage);
 
         if (isResourceAllocationRequired == "true") {
             std::string totalMemory = strArr[2];
@@ -353,9 +371,6 @@ void PerformanceUtil::collectLocalPerformanceData(std::string isVMStatManager, s
                           reportTimeString + "')";
 
     perfDb->runInsert(placePerfSql);
-
-    Utils::send_job("placePerfDataLocalO_" + hostId, "memory_usage", to_string(memoryUsage));
-    Utils::send_job("placePerfDataLocalO_" + hostId, "cpu_usage", to_string(cpuUsage));
 }
 
 int PerformanceUtil::collectRemoteSLAResourceUtilization(std::string host, int port, std::string isVMStatManager,
@@ -477,11 +492,9 @@ int PerformanceUtil::collectRemoteSLAResourceUtilization(std::string host, int p
 
 void PerformanceUtil::collectLocalSLAResourceUtilization(std::string graphId, std::string placeId, std::string command,
                                                          std::string category, int elapsedTime, bool autoCalibrate) {
-    StatisticCollector statisticCollector;
-    statisticCollector.init();
     string graphSlaId;
 
-    double loadAverage = statisticCollector.getLoadAverage();
+    double loadAverage = StatisticCollector::getLoadAverage();
 
     auto executedTime = std::chrono::system_clock::now();
     std::time_t reportTime = std::chrono::system_clock::to_time_t(executedTime);
@@ -510,11 +523,8 @@ void PerformanceUtil::collectLocalSLAResourceUtilization(std::string graphId, st
 ResourceConsumption PerformanceUtil::retrieveLocalResourceConsumption(std::string host, std::string placeId) {
     ResourceConsumption placeResourceConsumption;
 
-    StatisticCollector statisticCollector;
-    statisticCollector.init();
-
-    int memoryUsage = statisticCollector.getMemoryUsageByProcess();
-    double cpuUsage = statisticCollector.getCpuUsage();
+    int memoryUsage = StatisticCollector::getMemoryUsageByProcess();
+    double cpuUsage = StatisticCollector::getCpuUsage();
 
     placeResourceConsumption.memoryUsage = memoryUsage;
     placeResourceConsumption.host = host;
@@ -891,9 +901,7 @@ void PerformanceUtil::adjustAggregateLoadMap(std::map<std::string, std::vector<d
 }
 
 void PerformanceUtil::logLoadAverage() {
-    StatisticCollector statisticCollector;
-
-    double currentLoadAverage = statisticCollector.getLoadAverage();
+    double currentLoadAverage = StatisticCollector::getLoadAverage();
 
     std::cout << "###PERF### CURRENT LOAD: " + std::to_string(currentLoadAverage) << std::endl;
     Utils::send_job("loadAverage", "load_average", std::to_string(currentLoadAverage));

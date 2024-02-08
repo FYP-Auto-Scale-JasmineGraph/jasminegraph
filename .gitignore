@@ -81,3 +81,5 @@ Makefile
 __pycache__
 
 coverage.xml
+
+*.db*

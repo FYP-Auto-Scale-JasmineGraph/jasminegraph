@@ -682,7 +682,15 @@ std::string Utils::send_job(std::string job_group_name, std::string metric_name,
     std::string response_string;
     curl = curl_easy_init();
     if (curl) {
-        std::string hostPGAddr = pushGatewayJobAddr + job_group_name;
+        std::string hostPGAddr;
+        const char* envWorkerID = getenv("WORKER_ID");
+        std::string workerID;
+        if(envWorkerID){
+            workerID = std::string(getenv("WORKER_ID"));
+        } else{
+            workerID = "-1";
+        }
+        hostPGAddr = pushGatewayJobAddr + job_group_name + "_" + workerID;
         curl_easy_setopt(curl, CURLOPT_URL, hostPGAddr.c_str());
 
         // Set the callback function to handle the response data
