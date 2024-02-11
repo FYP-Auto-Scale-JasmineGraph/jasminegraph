@@ -141,10 +141,9 @@ void TriangleCountExecutor::execute() {
         if (partitionMap.find(workerID) == partitionMap.end()) {
             std::vector<string> partitionVec;
             partitionVec.push_back(partitionId);
-            partitionMap.insert(std::pair<string, std::vector<string>>(workerID, partitionVec));
+            partitionMap[workerID] = partitionVec;
         } else {
-            std::vector<string> partitionVec = partitionMap.find(workerID)->second;
-            partitionVec.push_back(partitionId);
+            partitionMap[workerID].push_back(partitionId);
         }
 
         triangleCount_logger.log("###TRIANGLE-COUNT-EXECUTOR### Getting Triangle Count : Host " + host +
@@ -184,8 +183,8 @@ void TriangleCountExecutor::execute() {
         "SELECT attempt from graph_sla INNER JOIN sla_category where graph_sla.id_sla_category=sla_category.id and "
         "graph_sla.graph_id='" +
         graphId + "' and graph_sla.partition_count='" + std::to_string(partitionCount) +
-        "' and sla_category.category='" + Conts::SLA_CATEGORY::LATENCY +
-    "' and sla_category.command='" + TRIANGLES + "';";
+        "' and sla_category.category='" + Conts::SLA_CATEGORY::LATENCY + "' and sla_category.command='" + TRIANGLES +
+        "';";
 
     std::vector<vector<pair<string, string>>> queryResults = perfDB->runSelect(query);
 
@@ -199,9 +198,8 @@ void TriangleCountExecutor::execute() {
     } else {
         triangleCount_logger.log("###TRIANGLE-COUNT-EXECUTOR### Inserting initial record for SLA ", "info");
         Utils::updateSLAInformation(perfDB, graphId, partitionCount, 0, TRIANGLES, Conts::SLA_CATEGORY::LATENCY);
-        statResponse.push_back(std::async(std::launch::async, collectPerformaceData, perfDB,
-                                          graphId.c_str(), TRIANGLES, Conts::SLA_CATEGORY::LATENCY, partitionCount,
-                                          masterIP, autoCalibrate));
+        statResponse.push_back(std::async(std::launch::async, collectPerformaceData, perfDB, graphId.c_str(), TRIANGLES,
+                                          Conts::SLA_CATEGORY::LATENCY, partitionCount, masterIP, autoCalibrate));
         isStatCollect = true;
     }
 
@@ -620,7 +618,6 @@ long TriangleCountExecutor::aggregateCentralStoreTriangles(SQLiteDBInterface *sq
         std::vector<std::future<string>> remoteGraphCopyResponse;
         int minimumWeight = 0;
         std::string minWeightWorker;
-        string aggregatorHost = "";
         std::string partitionIdList = "";
 
         std::vector<string>::iterator workerCombinationIterator;
@@ -646,7 +643,7 @@ long TriangleCountExecutor::aggregateCentralStoreTriangles(SQLiteDBInterface *sq
         }
 
         string aggregatorSqlStatement =
-            "SELECT ip,user,server_port,server_data_port,partition_idpartition "
+            "SELECT ip,server_port,server_data_port,partition_idpartition "
             "FROM worker_has_partition INNER JOIN worker ON worker_has_partition.worker_idworker=worker.idworker "
             "WHERE partition_graph_idgraph=" +
             graphId + " and idworker=" + minWeightWorker + ";";
@@ -656,25 +653,17 @@ long TriangleCountExecutor::aggregateCentralStoreTriangles(SQLiteDBInterface *sq
         vector<pair<string, string>> aggregatorData = result.at(0);
 
         std::string aggregatorIp = aggregatorData.at(0).second;
-        std::string aggregatorUser = aggregatorData.at(1).second;
-        std::string aggregatorPort = aggregatorData.at(2).second;
-        std::string aggregatorDataPort = aggregatorData.at(3).second;
-        std::string aggregatorPartitionId = aggregatorData.at(4).second;
-
-        if ((aggregatorIp.find("localhost") != std::string::npos) || aggregatorIp == masterIP) {
-            aggregatorHost = aggregatorIp;
-        } else {
-            aggregatorHost = aggregatorUser + "@" + aggregatorIp;
-        }
+        std::string aggregatorPort = aggregatorData.at(1).second;
+        std::string aggregatorDataPort = aggregatorData.at(2).second;
+        std::string aggregatorPartitionId = aggregatorData.at(3).second;
 
         for (aggregatorCopyCombinationIterator = workerCombination.begin();
              aggregatorCopyCombinationIterator != workerCombination.end(); ++aggregatorCopyCombinationIterator) {
             std::string workerId = *aggregatorCopyCombinationIterator;
-            string host = "";
 
             if (workerId != minWeightWorker) {
                 string sqlStatement =
-                    "SELECT ip,user,server_port,server_data_port,partition_idpartition "
+                    "SELECT partition_idpartition "
                     "FROM worker_has_partition INNER JOIN worker ON "
                     "worker_has_partition.worker_idworker=worker.idworker "
                     "WHERE partition_graph_idgraph=" +
@@ -684,28 +673,18 @@ long TriangleCountExecutor::aggregateCentralStoreTriangles(SQLiteDBInterface *sq
 
                 vector<pair<string, string>> workerData = result.at(0);
 
-                std::string workerIp = workerData.at(0).second;
-                std::string workerUser = workerData.at(1).second;
-                std::string workerPort = workerData.at(2).second;
-                std::string workerDataPort = workerData.at(3).second;
-                std::string partitionId = workerData.at(4).second;
-
-                if ((workerIp.find("localhost") != std::string::npos) || workerIp == masterIP) {
-                    host = workerIp;
-                } else {
-                    host = workerUser + "@" + workerIp;
-                }
+                std::string partitionId = workerData.at(0).second;
 
                 partitionIdList += partitionId + ",";
 
                 std::string centralStoreAvailable = isFileAccessibleToWorker(
-                    graphId, partitionId, aggregatorHost, aggregatorPort, masterIP,
+                    graphId, partitionId, aggregatorIp, aggregatorPort, masterIP,
                     JasmineGraphInstanceProtocol::FILE_TYPE_CENTRALSTORE_AGGREGATE, std::string());
 
                 if (centralStoreAvailable.compare("false") == 0) {
                     remoteGraphCopyResponse.push_back(
                         std::async(std::launch::async, TriangleCountExecutor::copyCentralStoreToAggregator,
-                                   aggregatorHost, aggregatorPort, aggregatorDataPort, atoi(graphId.c_str()),
+                                   aggregatorIp, aggregatorPort, aggregatorDataPort, atoi(graphId.c_str()),
                                    atoi(partitionId.c_str()), masterIP));
                 }
             }
@@ -719,8 +698,8 @@ long TriangleCountExecutor::aggregateCentralStoreTriangles(SQLiteDBInterface *sq
         workerWeightMap[minWeightWorker] = minimumWeight;
 
         triangleCountResponse.push_back(std::async(
-            std::launch::async, TriangleCountExecutor::countCentralStoreTriangles, aggregatorHost, aggregatorPort,
-            aggregatorHost, aggregatorPartitionId, adjustedPartitionIdList, graphId, masterIP, threadPriority));
+            std::launch::async, TriangleCountExecutor::countCentralStoreTriangles, aggregatorPort, aggregatorIp,
+            aggregatorPartitionId, adjustedPartitionIdList, graphId, masterIP, threadPriority));
     }
 
     for (auto &&futureCall : triangleCountResponse) {
@@ -761,10 +740,6 @@ string TriangleCountExecutor::isFileAccessibleToWorker(std::string graphId, std:
     if (sockfd < 0) {
         std::cerr << "Cannot create socket" << std::endl;
         return 0;
-    }
-
-    if (aggregatorHostName.find('@') != std::string::npos) {
-        aggregatorHostName = Utils::split(aggregatorHostName, '@')[1];
     }
 
     server = gethostbyname(aggregatorHostName.c_str());
@@ -1305,10 +1280,6 @@ std::string TriangleCountExecutor::copyCentralStoreToAggregator(std::string aggr
         return 0;
     }
 
-    if (aggregatorHostName.find('@') != std::string::npos) {
-        aggregatorHostName = Utils::split(aggregatorHostName, '@')[1];
-    }
-
     server = gethostbyname(aggregatorHostName.c_str());
     if (server == NULL) {
         triangleCount_logger.error("ERROR, no host named " + aggregatorHostName);
@@ -1471,10 +1442,10 @@ std::string TriangleCountExecutor::copyCentralStoreToAggregator(std::string aggr
     return response;
 }
 
-string TriangleCountExecutor::countCentralStoreTriangles(std::string aggregatorHostName, std::string aggregatorPort,
-                                                         std::string host, std::string partitionId,
-                                                         std::string partitionIdList, std::string graphId,
-                                                         std::string masterIP, int threadPriority) {
+string TriangleCountExecutor::countCentralStoreTriangles(std::string aggregatorPort, std::string host,
+                                                         std::string partitionId, std::string partitionIdList,
+                                                         std::string graphId, std::string masterIP,
+                                                         int threadPriority) {
     int sockfd;
     char data[301];
     bool loop = false;
@@ -1487,10 +1458,6 @@ string TriangleCountExecutor::countCentralStoreTriangles(std::string aggregatorH
     if (sockfd < 0) {
         std::cerr << "Cannot create socket" << std::endl;
         return 0;
-    }
-
-    if (host.find('@') != std::string::npos) {
-        host = Utils::split(host, '@')[1];
     }
 
     server = gethostbyname(host.c_str());

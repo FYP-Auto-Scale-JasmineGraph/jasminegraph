@@ -25,15 +25,15 @@ limitations under the License.
 #include "../backend/JasmineGraphBackend.h"
 #include "../frontend/JasmineGraphFrontEnd.h"
 #include "../frontend/core/scheduler/JobScheduler.h"
-#include "../k8s/K8sWorkerController.h"
 #include "../metadb/SQLiteDBInterface.h"
 #include "../performance/metrics/StatisticCollector.h"
 #include "../performancedb/PerformanceSQLiteDBInterface.h"
 #include "../util/Conts.h"
 #include "../util/Utils.h"
 
-using std::map;
+class K8sWorkerController;
 
+using std::map;
 class JasmineGraphServer {
  private:
     map<std::string, long> hostPlaceMap;
@@ -45,7 +45,6 @@ class JasmineGraphServer {
     int serverDataPort;
     std::map<std::string, std::vector<int>> workerPortsMap;
     std::map<std::string, std::vector<int>> workerDataPortsMap;
-    K8sWorkerController *k8sWorkerController;
 
     JasmineGraphServer();
 
@@ -55,8 +54,6 @@ class JasmineGraphServer {
     void addHostsToMetaDB(std::string host, std::vector<int> portVector, std::vector<int> dataPortVector);
 
     void updateOperationalGraphList();
-
-    std::map<std::string, std::string> getLiveHostIDList();
 
     static bool hasEnding(std::string const &fullString, std::string const &ending);
     std::vector<std::string> getWorkerVector(std::string workerList);
@@ -116,7 +113,7 @@ class JasmineGraphServer {
     std::string masterHost;
     int numberOfWorkers = -1;
 
-    struct workers {
+    struct worker {
         std::string hostname;
         int port;
         int dataPort;
@@ -137,20 +134,13 @@ class JasmineGraphServer {
                              // partiton ID.
     };
 
-    // return hostWorkerMap
-    static std::vector<JasmineGraphServer::workers> getHostWorkerMap();
-
-    static std::map<std::string, workerPartition> getWorkerPartitions(string graphID);
-
-    std::map<std::string, workerPartitions> getGraphPartitionedHosts(std::string graphID);
+    static std::map<std::string, workerPartitions> getGraphPartitionedHosts(std::string graphID);
 
     static void inDegreeDistribution(std::string graphID);
 
     static void outDegreeDistribution(std::string graphID);
 
     static void duplicateCentralStore(std::string graphID);
-
-    static void pageRank(std::string graphID, double alpha, int iterations);
 
     static long getGraphVertexCount(std::string graphID);
 

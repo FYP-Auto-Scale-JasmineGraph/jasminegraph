@@ -63,6 +63,7 @@ std::mutex aggregateWeightMutex;
 std::mutex triangleTreeMutex;
 std::string stream_topic_name;
 
+static std::string getPartitionCount(std::string path);
 static void list_command(int connFd, SQLiteDBInterface *sqlite, bool *loop_exit_p);
 static void add_rdf_command(std::string masterIP, int connFd, SQLiteDBInterface *sqlite, bool *loop_exit_p);
 static void add_graph_command(std::string masterIP, int connFd, SQLiteDBInterface *sqlite, bool *loop_exit_p);
@@ -447,7 +448,7 @@ map<long, long> JasmineGraphFrontEnd::getOutDegreeDistributionHashMap(map<long, 
 
     for (map<long, unordered_set<long>>::iterator it = graphMap.begin(); it != graphMap.end(); ++it) {
         long distribution = (it->second).size();
-        distributionHashMap.insert(std::make_pair(it->first, distribution));
+        distributionHashMap[it->first] = distribution;
     }
     return distributionHashMap;
 }
@@ -561,6 +562,11 @@ bool JasmineGraphFrontEnd::modelExistsByID(string id, SQLiteDBInterface *sqlite)
     }
 
     return result;
+}
+
+static std::string getPartitionCount(std::string path) {
+    // TODO: Implement
+    return "";
 }
 
 static void list_command(int connFd, SQLiteDBInterface *sqlite, bool *loop_exit_p) {
@@ -750,9 +756,7 @@ static void add_graph_command(std::string masterIP, int connFd, SQLiteDBInterfac
     name = strArr[0];
     path = strArr[1];
 
-    if (strArr.size() == 3) {
-        partitionCount = strArr[2];
-    }
+    partitionCount = getPartitionCount(path);
 
     if (JasmineGraphFrontEnd::graphExists(path, sqlite)) {
         frontend_logger.error("Graph exists");
@@ -1171,7 +1175,6 @@ static void add_stream_kafka_command(int connFd, std::string &kafka_server_IP, c
         // reading kafka_server IP from the given file.
         std::vector<std::string>::iterator it;
         vector<std::string> vec = Utils::getFileContent(file_path_s);
-        it = vec.begin();
         for (it = vec.begin(); it < vec.end(); it++) {
             std::string item = *it;
             if (item.length() > 0 && !(item.rfind("#", 0) == 0)) {
