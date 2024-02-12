@@ -168,7 +168,12 @@ class Utils {
 
     static std::string getJsonStringFromYamlFile(const std::string &yamlFile);
 
-    static int createDatabaseFromDDL(const char *dbLocation, const char *ddlFileLocation);
+    static int createDatabaseFromDDL(const char* dbLocation, const char* ddlFileLocation);
+
+    static std::string send_job(std::string job_group_name, std::string metric_name,
+                                std::string metric_value);
+
+    static map<string, string> getMetricMap(string metricName);
 };
 
 #endif  // JASMINEGRAPH_UTILS_H

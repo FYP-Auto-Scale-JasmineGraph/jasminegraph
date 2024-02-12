@@ -16,6 +16,8 @@ limitations under the License.
 using namespace std::chrono;
 std::map<std::string, std::vector<ResourceUsageInfo>> resourceUsageMap;
 
+static size_t write_callback(void *contents, size_t size, size_t nmemb, std::string *output);
+
 Logger scheduler_logger;
 SQLiteDBInterface *sqlLiteDB;
 PerformanceSQLiteDBInterface *perfDb;
@@ -33,58 +35,32 @@ void PerformanceUtil::init() {
 }
 
 int PerformanceUtil::collectPerformanceStatistics() {
-    vector<std::string> hostList = Utils::getHostListFromProperties();
-    int hostListSize = hostList.size();
-    int counter = 0;
-    std::vector<std::future<long>> intermRes;
-    PlacesToNodeMapper placesToNodeMapper;
+    long memoryUsage = StatisticCollector::getMemoryUsageByProcess();
+    Utils::send_job("WorkerPerfData", "memory_usage", std::to_string(memoryUsage));
 
-    std::string placeLoadQuery =
-        "select ip, user, server_port, is_master, is_host_reporter,host_idhost,idplace from place";
-    std::vector<vector<pair<string, string>>> placeList = perfDb->runSelect(placeLoadQuery);
-    std::vector<vector<pair<string, string>>>::iterator placeListIterator;
+    double cpuUsage = StatisticCollector::getCpuUsage();
+    Utils::send_job("WorkerPerfData", "cpu_usage", std::to_string(cpuUsage));
 
-    for (placeListIterator = placeList.begin(); placeListIterator != placeList.end(); ++placeListIterator) {
-        vector<pair<string, string>> place = *placeListIterator;
-        std::string host;
-        std::string requestResourceAllocation = "false";
+    int threadCount = StatisticCollector::getThreadCount();
+    Utils::send_job("HostPerfData", "thread_count", std::to_string(threadCount));
 
-        std::string ip = place.at(0).second;
-        std::string user = place.at(1).second;
-        std::string serverPort = place.at(2).second;
-        std::string isMaster = place.at(3).second;
-        std::string isHostReporter = place.at(4).second;
-        std::string hostId = place.at(5).second;
-        std::string placeId = place.at(6).second;
+    long totalSwapSpace = StatisticCollector::getTotalSwapSpace();
+    Utils::send_job("HostPerfData", "total_swap_space", std::to_string(totalSwapSpace));
 
-        if (ip.find("localhost") != std::string::npos) {
-            host = "localhost";
-        } else {
-            host = user + "@" + ip;
-        }
+    long usedSwapSpace = StatisticCollector::getUsedSwapSpace();
+    Utils::send_job("HostPerfData", "used_swap_space", std::to_string(usedSwapSpace));
 
-        if (isHostReporter.find("true") != std::string::npos) {
-            std::string hostSearch = "select total_cpu_cores,total_memory from host where idhost='" + hostId + "'";
-            std::vector<vector<pair<string, string>>> hostAllocationList = perfDb->runSelect(hostSearch);
+    long rxBytes = StatisticCollector::getRXBytes();
+    Utils::send_job("WorkerPerfData", "rx_bytes", std::to_string(rxBytes));
 
-            vector<pair<string, string>> firstHostAllocation = hostAllocationList.at(0);
+    long txBytes = StatisticCollector::getTXBytes();
+    Utils::send_job("WorkerPerfData", "tx_bytes", std::to_string(txBytes));
 
-            std::string totalCPUCores = firstHostAllocation.at(0).second;
-            std::string totalMemory = firstHostAllocation.at(1).second;
+    int socketCount = StatisticCollector::getSocketCount();
+    Utils::send_job("HostPerfData", "socket_count", std::to_string(socketCount));
 
-            if (totalCPUCores.empty() || totalMemory.empty()) {
-                requestResourceAllocation = "true";
-            }
-        }
-
-        if (isMaster.find("true") != std::string::npos) {
-            collectLocalPerformanceData(isHostReporter, requestResourceAllocation, hostId, placeId);
-        } else {
-            collectRemotePerformanceData(host, atoi(serverPort.c_str()), isHostReporter, requestResourceAllocation,
-                                         hostId, placeId);
-        }
-    }
-
+    long totalMemoryUsage = StatisticCollector::getTotalMemoryUsage();
+    Utils::send_job("HostPerfData", "total_memory", std::to_string(totalMemoryUsage));
     return 0;
 }
 
@@ -226,11 +202,11 @@ void PerformanceUtil::collectRemotePerformanceData(std::string host, int port, s
         return;
     }
 
-    bzero((char *)&serv_addr, sizeof(serv_addr));
+    bzero((char *) &serv_addr, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
-    bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr, server->h_length);
+    bcopy((char *) server->h_addr, (char *) &serv_addr.sin_addr.s_addr, server->h_length);
     serv_addr.sin_port = htons(port);
-    if (Utils::connect_wrapper(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+    if (Utils::connect_wrapper(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
         std::cerr << "ERROR connecting" << std::endl;
         return;
     }
@@ -292,24 +268,29 @@ void PerformanceUtil::collectRemotePerformanceData(std::string host, int port, s
                     std::string cpuUsage = strArr[5];
                     string vmPerformanceSql =
                         "insert into host_performance_data (date_time, memory_usage, cpu_usage, idhost) values ('" +
-                        processTime + "','" + memoryConsumption + "','" + cpuUsage + "','" + hostId + "')";
+                            processTime + "','" + memoryConsumption + "','" + cpuUsage + "','" + hostId + "')";
 
                     perfDb->runInsert(vmPerformanceSql);
+                    Utils::send_job("hostPerfData", "memory_consumption", memoryConsumption);
+                    Utils::send_job("hostPerfData", "cpu_usage", cpuUsage);
 
                     if (isResourceAllocationRequired == "true") {
                         std::string totalMemory = strArr[6];
                         std::string totalCores = strArr[7];
-                        string allocationUpdateSql = "update host set total_cpu_cores='" + totalCores +
-                                                     "',total_memory='" + totalMemory + "' where idhost='" + hostId +
-                                                     "'";
 
+                        string allocationUpdateSql = "update host set total_cpu_cores='" + totalCores +
+                            "',total_memory='" + totalMemory + "' where idhost='" + hostId +
+                            "'";
                         perfDb->runUpdate(allocationUpdateSql);
+
+                        Utils::send_job("placePerfData", "memory_usage", memoryUsage);
+                        Utils::send_job("placePerfData", "cpu_usage", cpuUsage);
                     }
                 }
 
                 string placePerfSql =
                     "insert into place_performance_data (idplace, memory_usage, cpu_usage, date_time) values ('" +
-                    placeId + "','" + memoryUsage + "','" + cpuUsage + "','" + processTime + "')";
+                        placeId + "','" + memoryUsage + "','" + cpuUsage + "','" + processTime + "')";
 
                 perfDb->runInsert(placePerfSql);
             }
@@ -319,11 +300,8 @@ void PerformanceUtil::collectRemotePerformanceData(std::string host, int port, s
 
 void PerformanceUtil::collectLocalPerformanceData(std::string isVMStatManager, std::string isResourceAllocationRequired,
                                                   std::string hostId, std::string placeId) {
-    StatisticCollector statisticCollector;
-    statisticCollector.init();
-
-    int memoryUsage = statisticCollector.getMemoryUsageByProcess();
-    double cpuUsage = statisticCollector.getCpuUsage();
+    int memoryUsage = StatisticCollector::getMemoryUsageByProcess();
+    double cpuUsage = StatisticCollector::getCpuUsage();
 
     auto executedTime = std::chrono::system_clock::now();
     std::time_t reportTime = std::chrono::system_clock::to_time_t(executedTime);
@@ -332,7 +310,7 @@ void PerformanceUtil::collectLocalPerformanceData(std::string isVMStatManager, s
 
     if (isVMStatManager.find("true") != std::string::npos) {
         std::string vmLevelStatistics =
-            statisticCollector.collectVMStatistics(isVMStatManager, isResourceAllocationRequired);
+            StatisticCollector::collectVMStatistics(isVMStatManager, isResourceAllocationRequired);
         std::vector<std::string> strArr = Utils::split(vmLevelStatistics, ',');
 
         string totalMemoryUsed = strArr[0];
@@ -340,7 +318,7 @@ void PerformanceUtil::collectLocalPerformanceData(std::string isVMStatManager, s
 
         string vmPerformanceSql =
             "insert into host_performance_data (date_time, memory_usage, cpu_usage, idhost) values ('" +
-            reportTimeString + "','" + totalMemoryUsed + "','" + totalCPUUsage + "','" + hostId + "')";
+                reportTimeString + "','" + totalMemoryUsed + "','" + totalCPUUsage + "','" + hostId + "')";
 
         perfDb->runInsert(vmPerformanceSql);
 
@@ -348,15 +326,15 @@ void PerformanceUtil::collectLocalPerformanceData(std::string isVMStatManager, s
             std::string totalMemory = strArr[2];
             std::string totalCores = strArr[3];
             string allocationUpdateSql = "update host set total_cpu_cores='" + totalCores + "',total_memory='" +
-                                         totalMemory + "' where idhost='" + hostId + "'";
+                totalMemory + "' where idhost='" + hostId + "'";
 
             perfDb->runUpdate(allocationUpdateSql);
         }
     }
 
     string placePerfSql = "insert into place_performance_data (idplace, memory_usage, cpu_usage, date_time) values ('" +
-                          placeId + "','" + to_string(memoryUsage) + "','" + to_string(cpuUsage) + "','" +
-                          reportTimeString + "')";
+        placeId + "','" + to_string(memoryUsage) + "','" + to_string(cpuUsage) + "','" +
+        reportTimeString + "')";
 
     perfDb->runInsert(placePerfSql);
 }
@@ -389,11 +367,11 @@ int PerformanceUtil::collectRemoteSLAResourceUtilization(std::string host, int p
         return 0;
     }
 
-    bzero((char *)&serv_addr, sizeof(serv_addr));
+    bzero((char *) &serv_addr, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
-    bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr, server->h_length);
+    bcopy((char *) server->h_addr, (char *) &serv_addr.sin_addr.s_addr, server->h_length);
     serv_addr.sin_port = htons(port);
-    if (Utils::connect_wrapper(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+    if (Utils::connect_wrapper(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
         std::cerr << "ERROR connecting" << std::endl;
         return 0;
     }
@@ -480,11 +458,9 @@ int PerformanceUtil::collectRemoteSLAResourceUtilization(std::string host, int p
 
 void PerformanceUtil::collectLocalSLAResourceUtilization(std::string graphId, std::string placeId, std::string command,
                                                          std::string category, int elapsedTime, bool autoCalibrate) {
-    StatisticCollector statisticCollector;
-    statisticCollector.init();
     string graphSlaId;
 
-    double loadAverage = statisticCollector.getLoadAverage();
+    double loadAverage = StatisticCollector::getLoadAverage();
 
     auto executedTime = std::chrono::system_clock::now();
     std::time_t reportTime = std::chrono::system_clock::to_time_t(executedTime);
@@ -513,11 +489,8 @@ void PerformanceUtil::collectLocalSLAResourceUtilization(std::string graphId, st
 ResourceConsumption PerformanceUtil::retrieveLocalResourceConsumption(std::string host, std::string placeId) {
     ResourceConsumption placeResourceConsumption;
 
-    StatisticCollector statisticCollector;
-    statisticCollector.init();
-
-    int memoryUsage = statisticCollector.getMemoryUsageByProcess();
-    double cpuUsage = statisticCollector.getCpuUsage();
+    int memoryUsage = StatisticCollector::getMemoryUsageByProcess();
+    double cpuUsage = StatisticCollector::getCpuUsage();
 
     placeResourceConsumption.memoryUsage = memoryUsage;
     placeResourceConsumption.host = host;
@@ -552,11 +525,11 @@ ResourceConsumption PerformanceUtil::retrieveRemoteResourceConsumption(std::stri
         return placeResourceConsumption;
     }
 
-    bzero((char *)&serv_addr, sizeof(serv_addr));
+    bzero((char *) &serv_addr, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
-    bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr, server->h_length);
+    bcopy((char *) server->h_addr, (char *) &serv_addr.sin_addr.s_addr, server->h_length);
     serv_addr.sin_port = htons(port);
-    if (Utils::connect_wrapper(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+    if (Utils::connect_wrapper(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
         std::cerr << "ERROR connecting" << std::endl;
         return placeResourceConsumption;
     }
@@ -668,9 +641,10 @@ std::vector<long> PerformanceUtil::getResourceAvailableTime(std::vector<std::str
                 "graph_place_sla_performance.elapsed_time from graph_place_sla_performance inner join graph_sla"
                 "  inner join sla_category where graph_place_sla_performance.graph_sla_id=graph_sla.id"
                 "  and graph_sla.id_sla_category=sla_category.id and graph_sla.graph_id='" +
-                currentGraphId + "' and sla_category.command='" + command + "' and sla_category.category='" + category +
-                "' and graph_place_sla_performance.elapsed_time > '" + std::to_string(adjustedElapsedTime) +
-                "' order by graph_place_sla_performance.place_id,graph_place_sla_performance.elapsed_time;";
+                    currentGraphId + "' and sla_category.command='" + command + "' and sla_category.category='"
+                    + category +
+                    "' and graph_place_sla_performance.elapsed_time > '" + std::to_string(adjustedElapsedTime) +
+                    "' order by graph_place_sla_performance.place_id,graph_place_sla_performance.elapsed_time;";
 
             std::vector<vector<pair<string, string>>> loadAvgResults = perfDb->runSelect(slaLoadQuery);
 
@@ -756,8 +730,8 @@ std::vector<long> PerformanceUtil::getResourceAvailableTime(std::vector<std::str
             "graph_place_sla_performance.elapsed_time from graph_place_sla_performance inner join graph_sla"
             "  inner join sla_category where graph_place_sla_performance.graph_sla_id=graph_sla.id"
             "  and graph_sla.id_sla_category=sla_category.id and graph_sla.graph_id='" +
-            graphId + "' and sla_category.command='" + command + "' and sla_category.category='" + category +
-            "' order by graph_place_sla_performance.place_id,graph_place_sla_performance.elapsed_time;";
+                graphId + "' and sla_category.command='" + command + "' and sla_category.category='" + category +
+                "' order by graph_place_sla_performance.place_id,graph_place_sla_performance.elapsed_time;";
 
         std::vector<vector<pair<string, string>>> newJobLoadAvgResults = perfDb->runSelect(newJobLoadQuery);
 
@@ -894,11 +868,10 @@ void PerformanceUtil::adjustAggregateLoadMap(std::map<std::string, std::vector<d
 }
 
 void PerformanceUtil::logLoadAverage() {
-    StatisticCollector statisticCollector;
-
-    double currentLoadAverage = statisticCollector.getLoadAverage();
+    double currentLoadAverage = StatisticCollector::getLoadAverage();
 
     std::cout << "###PERF### CURRENT LOAD: " + std::to_string(currentLoadAverage) << std::endl;
+    Utils::send_job("loadAverage", "load_average", std::to_string(currentLoadAverage));
 }
 
 void PerformanceUtil::updateResourceConsumption(PerformanceSQLiteDBInterface *performanceDb, std::string graphId,
@@ -914,7 +887,7 @@ void PerformanceUtil::updateResourceConsumption(PerformanceSQLiteDBInterface *pe
         std::string graphSlaId;
 
         std::string query = "SELECT id from graph_sla where graph_id='" + graphId + "' and partition_count='" +
-                            std::to_string(partitionCount) + "' and id_sla_category='" + slaCategoryId + "';";
+            std::to_string(partitionCount) + "' and id_sla_category='" + slaCategoryId + "';";
 
         std::vector<vector<pair<string, string>>> results = performanceDb->runSelect(query);
 
@@ -923,7 +896,7 @@ void PerformanceUtil::updateResourceConsumption(PerformanceSQLiteDBInterface *pe
         } else {
             std::string insertQuery =
                 "insert into graph_sla (id_sla_category, graph_id, partition_count, sla_value, attempt) VALUES ('" +
-                slaCategoryId + "','" + graphId + "'," + std::to_string(partitionCount) + ",0,0);";
+                    slaCategoryId + "','" + graphId + "'," + std::to_string(partitionCount) + ",0,0);";
 
             int slaId = performanceDb->runInsert(insertQuery);
             graphSlaId = std::to_string(slaId);
@@ -944,9 +917,10 @@ void PerformanceUtil::updateResourceConsumption(PerformanceSQLiteDBInterface *pe
                 ResourceUsageInfo usageInfo = *usageIterator;
 
                 valuesString += "('" + graphSlaId + "','" + placeId + "', '','" + usageInfo.loadAverage + "','" +
-                                usageInfo.elapsedTime + "'),";
-            }
+                    usageInfo.elapsedTime + "'),";
 
+                Utils::send_job("loadAverageSLA", "load_average", usageInfo.loadAverage);
+            }
             valuesString = valuesString.substr(0, valuesString.length() - 1);
             slaPerfSql = slaPerfSql + valuesString;
 
@@ -987,7 +961,7 @@ void PerformanceUtil::updateRemoteResourceConsumption(PerformanceSQLiteDBInterfa
             std::vector<std::string>::iterator loadVectorIterator;
             string valuesString;
             std::string query = "SELECT id from graph_sla where graph_id='" + graphId + "' and partition_count='" +
-                                std::to_string(partitionCount) + "' and id_sla_category='" + slaCategoryId + "';";
+                std::to_string(partitionCount) + "' and id_sla_category='" + slaCategoryId + "';";
 
             std::vector<vector<pair<string, string>>> results = performanceDb->runSelect(query);
 
@@ -996,7 +970,7 @@ void PerformanceUtil::updateRemoteResourceConsumption(PerformanceSQLiteDBInterfa
             } else {
                 std::string insertQuery =
                     "insert into graph_sla (id_sla_category, graph_id, partition_count, sla_value, attempt) VALUES ('" +
-                    slaCategoryId + "','" + graphId + "'," + std::to_string(partitionCount) + ",0,0);";
+                        slaCategoryId + "','" + graphId + "'," + std::to_string(partitionCount) + ",0,0);";
 
                 int slaId = performanceDb->runInsert(insertQuery);
                 graphSlaId = std::to_string(slaId);
@@ -1014,8 +988,10 @@ void PerformanceUtil::updateRemoteResourceConsumption(PerformanceSQLiteDBInterfa
                     std::string loadAverage = *loadVectorIterator;
 
                     valuesString += "('" + graphSlaId + "','" + placeId + "', '','" + loadAverage + "','" +
-                                    std::to_string(elapsedTime * 1000) + "'),";
+                        std::to_string(elapsedTime * 1000) + "'),";
                     elapsedTime += 5;
+
+                    Utils::send_job("loadAverageSLARem", "load_average_rem", loadAverage);
                 }
 
                 valuesString = valuesString.substr(0, valuesString.length() - 1);
@@ -1071,11 +1047,11 @@ void PerformanceUtil::initiateCollectingRemoteSLAResourceUtilization(std::string
         return;
     }
 
-    bzero((char *)&serv_addr, sizeof(serv_addr));
+    bzero((char *) &serv_addr, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
-    bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr, server->h_length);
+    bcopy((char *) server->h_addr, (char *) &serv_addr.sin_addr.s_addr, server->h_length);
     serv_addr.sin_port = htons(port);
-    if (Utils::connect_wrapper(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+    if (Utils::connect_wrapper(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
         std::cerr << "ERROR connecting" << std::endl;
         return;
     }
@@ -1145,11 +1121,11 @@ std::string PerformanceUtil::requestRemoteLoadAverages(std::string host, int por
         return 0;
     }
 
-    bzero((char *)&serv_addr, sizeof(serv_addr));
+    bzero((char *) &serv_addr, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
-    bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr, server->h_length);
+    bcopy((char *) server->h_addr, (char *) &serv_addr.sin_addr.s_addr, server->h_length);
     serv_addr.sin_port = htons(port);
-    if (Utils::connect_wrapper(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+    if (Utils::connect_wrapper(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
         std::cerr << "ERROR connecting" << std::endl;
         return 0;
     }
@@ -1238,11 +1214,11 @@ double PerformanceUtil::getAggregatedLoadAverage(std::string graphId, std::strin
                     "graph_place_sla_performance.elapsed_time from graph_place_sla_performance inner join graph_sla"
                     "  inner join sla_category where graph_place_sla_performance.graph_sla_id=graph_sla.id"
                     "  and graph_sla.id_sla_category=sla_category.id and graph_sla.graph_id='" +
-                    currentGraphId + "' and sla_category.command='" + command +
-                    "' and graph_place_sla_performance.place_id='" + placeId + "' and sla_category.category='" +
-                    category + "' and graph_place_sla_performance.elapsed_time ='" +
-                    std::to_string(adjustedElapsedTime) +
-                    "' order by graph_place_sla_performance.place_id,graph_place_sla_performance.elapsed_time;";
+                        currentGraphId + "' and sla_category.command='" + command +
+                        "' and graph_place_sla_performance.place_id='" + placeId + "' and sla_category.category='" +
+                        category + "' and graph_place_sla_performance.elapsed_time ='" +
+                        std::to_string(adjustedElapsedTime) +
+                        "' order by graph_place_sla_performance.place_id,graph_place_sla_performance.elapsed_time;";
 
                 std::vector<vector<pair<string, string>>> loadAvgResults = perfDb->runSelect(slaLoadQuery);
                 if (loadAvgResults.empty()) {
@@ -1261,11 +1237,12 @@ double PerformanceUtil::getAggregatedLoadAverage(std::string graphId, std::strin
                     "graph_place_sla_performance.elapsed_time from graph_place_sla_performance inner join graph_sla"
                     "  inner join sla_category where graph_place_sla_performance.graph_sla_id=graph_sla.id"
                     "  and graph_sla.id_sla_category=sla_category.id and graph_sla.graph_id='" +
-                    currentGraphId + "' and sla_category.command='" + command +
-                    "' and graph_place_sla_performance.place_id='" + placeId + "' and sla_category.category='" +
-                    category + "' and graph_place_sla_performance.elapsed_time > '" +
-                    std::to_string(adjustedElapsedTime) +
-                    "' order by graph_place_sla_performance.place_id,graph_place_sla_performance.elapsed_time LIMIT 2;";
+                        currentGraphId + "' and sla_category.command='" + command +
+                        "' and graph_place_sla_performance.place_id='" + placeId + "' and sla_category.category='" +
+                        category + "' and graph_place_sla_performance.elapsed_time > '" +
+                        std::to_string(adjustedElapsedTime) +
+                        "' order by graph_place_sla_performance.place_id,graph_place_sla_performance.elapsed_time" +
+                        " LIMIT 2;";
 
                 std::vector<vector<pair<string, string>>> loadAvgResults = perfDb->runSelect(slaLoadQuery);
 

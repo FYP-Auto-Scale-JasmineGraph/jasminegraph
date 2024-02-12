@@ -4,6 +4,14 @@ set -e
 
 TIMEOUT_SECONDS=60
 
+if [ $1 == "clean" ]; then
+    kubectl delete deployments -l application=jasminegraph
+    kubectl delete services -l application=jasminegraph
+    kubectl delete pvc -l application=jasminegraph
+    kubectl delete pv -l application=jasminegraph
+    exit 0
+fi
+
 META_DB_PATH=${META_DB_PATH}
 PERFORMANCE_DB_PATH=${PERFORMANCE_DB_PATH}
 DATA_PATH=${DATA_PATH}
@@ -51,6 +59,48 @@ if [ -z "$ENABLE_NMON" ]; then
 fi
 
 kubectl apply -f ./k8s/rbac.yaml
+kubectl apply -f ./k8s/pushgateway.yaml
+
+# wait until pushgateway starts listening
+cur_timestamp="$(date +%s)"
+end_timestamp="$((cur_timestamp + TIMEOUT_SECONDS))"
+spin="/-\|"
+i=0
+while true; do
+    if [ "$(date +%s)" -gt "$end_timestamp" ]; then
+        echo "Timeout"
+        exit 1
+    fi
+    pushgatewayIP="$(kubectl get services |& grep pushgateway | tr '\t' ' ' | tr -s ' ' | cut -d ' ' -f 3)"
+    if [ ! -z "$pushgatewayIP" ]; then
+        break
+    fi
+    printf "Waiting pushgateway to start [%c] \r" "${spin:i++%${#spin}:1}"
+    sleep .2
+done
+
+pushgateway_address="${pushgatewayIP}:9091" envsubst <"./k8s/prometheus.yaml" | kubectl apply -f -
+
+cur_timestamp="$(date +%s)"
+end_timestamp="$((cur_timestamp + TIMEOUT_SECONDS))"
+while true; do
+    if [ "$(date +%s)" -gt "$end_timestamp" ]; then
+        echo "Timeout"
+        exit 1
+    fi
+    prometheusIP="$(kubectl get services |& grep prometheus | tr '\t' ' ' | tr -s ' ' | cut -d ' ' -f 3)"
+    if [ ! -z "$prometheusIP" ]; then
+        break
+    fi
+    printf "Waiting prometheus to start [%c] \r" "${spin:i++%${#spin}:1}"
+    sleep .2
+done
+
+
+sed -i "s#org.jasminegraph.collector.pushgateway=.*#org.jasminegraph.collector.pushgateway=http://${pushgatewayIP}:9091/#" ./conf/jasminegraph-server.properties
+sed -i "s#org.jasminegraph.collector.prometheus=.*#org.jasminegraph.collector.prometheus=http://${pushgatewayIP}:9090/#" ./conf/jasminegraph-server.properties
+
+docker build -t jasminegraph .
 
 metadb_path="${META_DB_PATH}" \
     performancedb_path="${PERFORMANCE_DB_PATH}" \
@@ -65,8 +115,6 @@ no_of_workers="${NO_OF_WORKERS}" \
 # wait until master starts listening
 cur_timestamp="$(date +%s)"
 end_timestamp="$((cur_timestamp + TIMEOUT_SECONDS))"
-spin="/-\|"
-i=0
 while true; do
     if [ "$(date +%s)" -gt "$end_timestamp" ]; then
         echo "Timeout"
