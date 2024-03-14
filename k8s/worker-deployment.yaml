@@ -51,10 +51,7 @@ spec:
             - containerPort: 7778
           resources:
             requests:
-              cpu: "1000m"
-              memory: "2Gi"
-            limits:
-              cpu: "2000m"
+              cpu: "2500m"
               memory: "4Gi"
           volumeMounts:
             - mountPath: "/var/tmp/"
