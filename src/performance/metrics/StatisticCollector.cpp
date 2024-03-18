@@ -175,7 +175,6 @@ static void getCpuCycles(long long *totalp, long long *idlep) {
     char line[1024];
     fscanf(fp, "%[^\r\n]%*c", line);
     fclose(fp);
-    std::cout << line << std::endl;
     char *p = line;
     while (*p < '0' || *p > '9') p++;
     long long total = 0;

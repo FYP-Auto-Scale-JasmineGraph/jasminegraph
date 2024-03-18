@@ -191,18 +191,17 @@ static std::vector<int> reallocate_parts(std::map<int, string> &alloc, std::set<
     return copying;
 }
 
-static void scale_up(std::map<string, int> &loads, map<string, string> &workers, int copy_cnt) {
+static bool scale_up(std::map<string, int> &loads, map<string, string> &workers, int copy_cnt) {
     int curr_load = 0;
     for (auto it = loads.begin(); it != loads.end(); it++) {
         curr_load += it->second;
     }
     int n_cores = copy_cnt + curr_load - 3 * loads.size();
-    if (n_cores < 0) {
-        return;
+    if (n_cores <= 0) {
+        return false;
     }
-    int n_workers = n_cores / 2;  // allocate a little more to prevent saturation
-    if (n_cores % 2 > 0) n_workers++;
-    if (n_workers == 0) return;
+    int n_workers = n_cores / 2 + 1;  // allocate a little more to prevent saturation
+    if (n_workers == 0) return false;
 
     K8sWorkerController *k8sController = K8sWorkerController::getInstance();
     map<string, string> w_new = k8sController->scaleUp(n_workers);
@@ -211,6 +210,7 @@ static void scale_up(std::map<string, int> &loads, map<string, string> &workers,
         loads[it->first] = 0.1;
         workers[it->first] = it->second;
     }
+    return true;
 }
 
 static int alloc_net_plan(std::map<int, string> &alloc, std::vector<int> &parts,
@@ -295,7 +295,10 @@ static int alloc_net_plan(std::map<int, string> &alloc, std::vector<int> &parts,
     return best;
 }
 
-static void filter_partitions(std::map<string, std::vector<string>> &partitionMap, SQLiteDBInterface *sqlite,
+/**
+ * returns true if and only if scale up occurred
+ */
+static bool filter_partitions(std::map<string, std::vector<string>> &partitionMap, SQLiteDBInterface *sqlite,
                               string graphId) {
     map<string, string> workers;  // id => "ip:port"
     const std::vector<vector<pair<string, string>>> &results =
@@ -354,11 +357,12 @@ static void filter_partitions(std::map<string, std::vector<string>> &partitionMa
     cout << "calling alloc_plan" << endl;
     int unallocated = alloc_plan(alloc, remain, p_avail, loads);
     cout << "alloc_plan returned " << unallocated << endl;
+    bool scaled_up = false;
     if (unallocated > 0) {
         cout << "calling reallocate_parts" << endl;
         auto copying = reallocate_parts(alloc, remain, P_AVAIL);
         cout << "reallocate_parts completed" << endl;
-        scale_up(loads, workers, copying.size());
+        scaled_up = scale_up(loads, workers, copying.size());
         cout << "scale_up completed" << endl;
 
         map<string, int> net_loads;
@@ -425,6 +429,7 @@ static void filter_partitions(std::map<string, std::vector<string>> &partitionMa
         auto worker = it->second;
         partitionMap[worker].push_back(to_string(partition));
     }
+    return scaled_up;
 }
 
 void TriangleCountExecutor::execute() {
@@ -474,8 +479,6 @@ void TriangleCountExecutor::execute() {
     bool isCompositeAggregation = false;
     Utils::worker aggregatorWorker;
     vector<Utils::worker> workerList = Utils::getWorkerList(sqlite);
-    int workerListSize = workerList.size();
-    std::vector<std::future<long>> intermRes;
     std::vector<std::future<int>> statResponse;
     std::vector<std::string> compositeCentralStoreFiles;
 
@@ -489,7 +492,7 @@ void TriangleCountExecutor::execute() {
 
     const std::vector<vector<pair<string, string>>> &results = sqlite->runSelect(sqlStatement);
 
-    std::map<string, std::vector<string>> partitionMap;
+    std::map<string, std::vector<string>> partitionMap;  // worker_id => [partition_id1, partition_id2, ...]
 
     for (auto i = results.begin(); i != results.end(); ++i) {
         const std::vector<pair<string, string>> &rowData = *i;
@@ -522,7 +525,9 @@ void TriangleCountExecutor::execute() {
 
     if (jasminegraph_profile == PROFILE_K8S &&
         Utils::getJasmineGraphProperty("org.jasminegraph.autoscale.enabled") == "true") {
-        filter_partitions(partitionMap, sqlite, graphId);
+        if (filter_partitions(partitionMap, sqlite, graphId)) {
+            workerList = Utils::getWorkerList(sqlite);
+        }
     }
 
     cout << "final partitionMap = {" << endl;
@@ -561,6 +566,8 @@ void TriangleCountExecutor::execute() {
         fileCombinations = AbstractExecutor::getCombinations(compositeCentralStoreFiles);
     }
 
+    int workerListSize = workerList.size();
+    std::vector<std::future<long>> intermRes;
     std::map<std::string, std::string> combinationWorkerMap;
     std::unordered_map<long, std::unordered_map<long, std::unordered_set<long>>> triangleTree;
     std::mutex triangleTreeMutex;
@@ -586,33 +593,36 @@ void TriangleCountExecutor::execute() {
         }
     }
 
-    PerformanceUtil::init();
+    // (thevindu-w) temporarily removed
+    /*
+        PerformanceUtil::init();
 
-    std::string query =
-        "SELECT attempt from graph_sla INNER JOIN sla_category where graph_sla.id_sla_category=sla_category.id and "
-        "graph_sla.graph_id='" +
-        graphId + "' and graph_sla.partition_count='" + std::to_string(partitionCount) +
-        "' and sla_category.category='" + Conts::SLA_CATEGORY::LATENCY + "' and sla_category.command='" + TRIANGLES +
-        "';";
+        std::string query =
+            "SELECT attempt from graph_sla INNER JOIN sla_category where graph_sla.id_sla_category=sla_category.id and "
+            "graph_sla.graph_id='" +
+            graphId + "' and graph_sla.partition_count='" + std::to_string(partitionCount) +
+            "' and sla_category.category='" + Conts::SLA_CATEGORY::LATENCY + "' and sla_category.command='" + TRIANGLES
+       +
+            "';";
 
-    const std::vector<vector<pair<string, string>>> &queryResults = perfDB->runSelect(query);
+        const std::vector<vector<pair<string, string>>> &queryResults = perfDB->runSelect(query);
 
-    if (queryResults.size() > 0) {
-        std::string attemptString = queryResults[0][0].second;
-        int calibratedAttempts = atoi(attemptString.c_str());
+        if (queryResults.size() > 0) {
+            std::string attemptString = queryResults[0][0].second;
+            int calibratedAttempts = atoi(attemptString.c_str());
 
-        if (calibratedAttempts >= Conts::MAX_SLA_CALIBRATE_ATTEMPTS) {
-            canCalibrate = false;
+            if (calibratedAttempts >= Conts::MAX_SLA_CALIBRATE_ATTEMPTS) {
+                canCalibrate = false;
+            }
+        } else {
+            triangleCount_logger.log("###TRIANGLE-COUNT-EXECUTOR### Inserting initial record for SLA ", "info");
+            Utils::updateSLAInformation(perfDB, graphId, partitionCount, 0, TRIANGLES, Conts::SLA_CATEGORY::LATENCY);
+            statResponse.push_back(std::async(std::launch::async, AbstractExecutor::collectPerformaceData, perfDB,
+                                              graphId.c_str(), TRIANGLES, Conts::SLA_CATEGORY::LATENCY, partitionCount,
+                                              masterIP, autoCalibrate));
+            isStatCollect = true;
         }
-    } else {
-        triangleCount_logger.log("###TRIANGLE-COUNT-EXECUTOR### Inserting initial record for SLA ", "info");
-        Utils::updateSLAInformation(perfDB, graphId, partitionCount, 0, TRIANGLES, Conts::SLA_CATEGORY::LATENCY);
-        statResponse.push_back(std::async(std::launch::async, AbstractExecutor::collectPerformaceData, perfDB,
-                                          graphId.c_str(), TRIANGLES, Conts::SLA_CATEGORY::LATENCY, partitionCount,
-                                          masterIP, autoCalibrate));
-        isStatCollect = true;
-    }
-
+    */
     for (auto &&futureCall : intermRes) {
         result += futureCall.get();
     }
