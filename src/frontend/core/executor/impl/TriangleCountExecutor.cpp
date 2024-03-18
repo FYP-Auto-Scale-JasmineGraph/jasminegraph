@@ -524,7 +524,7 @@ void TriangleCountExecutor::execute() {
     cout << endl;
 
     if (jasminegraph_profile == PROFILE_K8S &&
-        Utils::getJasmineGraphProperty("org.jasminegraph.autoscale.enabled") == "true") {
+        unique_ptr<K8sInterface>(new K8sInterface())->getJasmineGraphConfig("auto_scaling_enabled") == "true") {
         if (filter_partitions(partitionMap, sqlite, graphId)) {
             workerList = Utils::getWorkerList(sqlite);
         }
