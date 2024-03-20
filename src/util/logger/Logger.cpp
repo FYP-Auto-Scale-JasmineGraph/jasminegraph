@@ -43,7 +43,7 @@ void Logger::log(std::string message, const std::string log_type) {
     // TODO: temporary fix only.
     // message = "[" + worker_name + " : " + to_string(tid) + "] " + message;
     message = " [" + log_type + "] [" + worker_name + " : " + to_string(tid) + "] " + message;
-    puts(message.c_str());
+    std::cout << message.c_str() << endl;
     return;
 
     if (log_type.compare("info") == 0) {
