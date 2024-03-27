@@ -79,36 +79,43 @@ K8sWorkerController *K8sWorkerController::getInstance(std::string masterIp, int 
 
 std::string K8sWorkerController::spawnWorker(int workerId) {
     k8sSpawnMutex.lock();
-    controller_logger.info("Spawning worker " + to_string(workerId));
-    auto volume = this->interface->createJasmineGraphPersistentVolume(workerId);
-    if (volume != nullptr && volume->metadata != nullptr && volume->metadata->name != nullptr) {
-        controller_logger.info("Worker " + std::to_string(workerId) + " persistent volume created successfully");
-    } else {
-        throw std::runtime_error("Worker " + std::to_string(workerId) + " persistent volume creation failed");
-    }
+    std::string ip;
+    v1_service_t *service;
+    try {
+        controller_logger.info("Spawning worker " + to_string(workerId));
+        auto volume = this->interface->createJasmineGraphPersistentVolume(workerId);
+        if (volume != nullptr && volume->metadata != nullptr && volume->metadata->name != nullptr) {
+            controller_logger.info("Worker " + std::to_string(workerId) + " persistent volume created successfully");
+        } else {
+            throw std::runtime_error("Worker " + std::to_string(workerId) + " persistent volume creation failed");
+        }
 
-    auto claim = this->interface->createJasmineGraphPersistentVolumeClaim(workerId);
-    if (claim != nullptr && claim->metadata != nullptr && claim->metadata->name != nullptr) {
-        controller_logger.info("Worker " + std::to_string(workerId) + " persistent volume claim created successfully");
-    } else {
-        throw std::runtime_error("Worker " + std::to_string(workerId) + " persistent volume claim creation failed");
-    }
+        auto claim = this->interface->createJasmineGraphPersistentVolumeClaim(workerId);
+        if (claim != nullptr && claim->metadata != nullptr && claim->metadata->name != nullptr) {
+            controller_logger.info("Worker " + std::to_string(workerId) + " persistent volume claim created successfully");
+        } else {
+            throw std::runtime_error("Worker " + std::to_string(workerId) + " persistent volume claim creation failed");
+        }
 
-    v1_service_t *service = this->interface->createJasmineGraphWorkerService(workerId);
-    if (service != nullptr && service->metadata != nullptr && service->metadata->name != nullptr) {
-        controller_logger.info("Worker " + std::to_string(workerId) + " service created successfully");
-    } else {
-        throw std::runtime_error("Worker " + std::to_string(workerId) + " service creation failed");
-    }
+        service = this->interface->createJasmineGraphWorkerService(workerId);
+        if (service != nullptr && service->metadata != nullptr && service->metadata->name != nullptr) {
+            controller_logger.info("Worker " + std::to_string(workerId) + " service created successfully");
+        } else {
+            throw std::runtime_error("Worker " + std::to_string(workerId) + " service creation failed");
+        }
 
-    std::string ip(service->spec->cluster_ip);
+        ip = string(service->spec->cluster_ip);
 
-    v1_deployment_t *deployment = this->interface->createJasmineGraphWorkerDeployment(workerId, ip, this->masterIp);
-    if (deployment != nullptr && deployment->metadata != nullptr && deployment->metadata->name != nullptr) {
-        controller_logger.info("Worker " + std::to_string(workerId) + " deployment created successfully");
+        v1_deployment_t *deployment = this->interface->createJasmineGraphWorkerDeployment(workerId, ip, this->masterIp);
+        if (deployment != nullptr && deployment->metadata != nullptr && deployment->metadata->name != nullptr) {
+            controller_logger.info("Worker " + std::to_string(workerId) + " deployment created successfully");
 
-    } else {
-        throw std::runtime_error("Worker " + std::to_string(workerId) + " deployment creation failed");
+        } else {
+            throw std::runtime_error("Worker " + std::to_string(workerId) + " deployment creation failed");
+        }
+    } catch (...) {
+        k8sSpawnMutex.unlock();
+        return "";
     }
     k8sSpawnMutex.unlock();
     controller_logger.info("Waiting for worker " + to_string(workerId) + " to respond");
