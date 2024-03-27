@@ -206,8 +206,9 @@ static void scale_up(std::map<string, int> &loads, map<string, string> &workers,
     if (n_workers == 0) return;
 
     K8sWorkerController *k8sController = K8sWorkerController::getInstance();
+    schedulerMutex.unlock();
     map<string, string> w_new = k8sController->scaleUp(n_workers);
-
+    schedulerMutex.lock();
     for (auto it = w_new.begin(); it != w_new.end(); it++) {
         loads[it->first] = 0.1;
         workers[it->first] = it->second;
