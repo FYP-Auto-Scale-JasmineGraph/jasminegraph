@@ -40,6 +40,7 @@ set(HEADERS globals.h
         src/query/algorithms/linkprediction/JasminGraphLinkPredictor.h
         src/query/algorithms/triangles/Triangles.h
         src/query/algorithms/triangles/StreamingTriangles.h
+        src/scale/scaler.h
         src/server/JasmineGraphInstance.h
         src/server/JasmineGraphInstanceFileTransferService.h
         src/server/JasmineGraphInstanceProtocol.h
@@ -107,6 +108,7 @@ set(SOURCES src/backend/JasmineGraphBackend.cpp
         src/query/algorithms/linkprediction/JasminGraphLinkPredictor.cpp
         src/query/algorithms/triangles/Triangles.cpp
         src/query/algorithms/triangles/StreamingTriangles.cpp
+        src/scale/scaler.cpp
         src/server/JasmineGraphInstance.cpp
         src/server/JasmineGraphInstanceFileTransferService.cpp
         src/server/JasmineGraphInstanceProtocol.cpp
