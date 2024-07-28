@@ -1400,7 +1400,7 @@ static void triangles_command(std::string masterIP, int connFd, SQLiteDBInterfac
 
         int threadPriority = std::atoi(priority.c_str());
 
-        string timebound_query = "SELECT timebound FROM operation_timebound WHERE idgraph=" + graph_id
+        string timebound_query = "SELECT time FROM graph_operation_time NATURAL JOIN operation WHERE idgraph=" + graph_id
                         + " AND operation='trian'";
 
         vector<vector<pair<string, string>>> result = sqlite->runSelect(timebound_query);
@@ -1487,8 +1487,8 @@ static void triangles_command(std::string masterIP, int connFd, SQLiteDBInterfac
 
         if (result.empty()) {
             // TODO (Ishad-M-I-M): Insert the timebound with the overaheads added
-            string insert_timebound_query = "INSERT INTO operation_timebound VALUES (" +
-                                            graph_id + ", trian, " + to_string(msDuration)+ ")";
+            string insert_timebound_query = "INSERT INTO graph_operation_time VALUES (" +
+                                            graph_id + ", 1, " + to_string(msDuration)+ ")";
             sqlite->runInsert(insert_timebound_query);
         }
 
