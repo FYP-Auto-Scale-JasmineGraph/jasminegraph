@@ -85,7 +85,7 @@ create table operation
 (
     idoperation INTEGER not null primary key,
     operation   VARCHAR
-)
+);
 
 create table graph_operation_time
 (
