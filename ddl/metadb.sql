@@ -81,7 +81,27 @@ create table worker_has_partition
     worker_idworker         INTEGER
 );
 
-INSERT INTO graph_status (idgraph_status, description) VALUES (1, 'LOADING');
-INSERT INTO graph_status (idgraph_status, description) VALUES (2, 'OPERATIONAL');
-INSERT INTO graph_status (idgraph_status, description) VALUES (3, 'DELETED');
-INSERT INTO graph_status (idgraph_status, description) VALUES (4, 'NONOPERATIONAL');
+create table operation
+(
+    idoperation INTEGER not null primary key,
+    operation   VARCHAR
+);
+
+create table graph_operation_time
+(
+    idgraph     INTEGER NOT NULL,
+    idoperation INTEGER NOT NULL,
+    time        INTEGER
+);
+
+create index graph_operation_time_index
+    on graph_operation_time (idgraph, idoperation);
+
+INSERT INTO graph_status (idgraph_status, description)
+VALUES (1, 'LOADING'),
+       (2, 'OPERATIONAL'),
+       (3, 'DELETED'),
+       (4, 'NONOPERATIONAL');
+
+INSERT INTO operation (idoperation, operation)
+VALUES (1, 'trian');
