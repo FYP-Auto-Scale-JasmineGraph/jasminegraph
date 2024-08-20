@@ -91,11 +91,9 @@ create table graph_operation_time
 (
     idgraph     INTEGER NOT NULL,
     idoperation INTEGER NOT NULL,
-    time        INTEGER
+    time        INTEGER,
+    primary key (idgraph, idoperation)
 );
-
-create index graph_operation_time_index
-    on graph_operation_time (idgraph, idoperation);
 
 INSERT INTO graph_status (idgraph_status, description)
 VALUES (1, 'LOADING'),

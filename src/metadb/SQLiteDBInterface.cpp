@@ -43,3 +43,18 @@ int SQLiteDBInterface::init() {
     db_logger.info("Database opened successfully :" + this->databaseLocation);
     return 0;
 }
+
+
+int SQLiteDBInterface::upsertGraphOperationTime(int graphId, int graphOpId, int opTime) {
+    return ((DBInterface *) this)->runInsert("INSERT OR REPLACE INTO graph_operation_time (idgraph, idoperation, time) VALUES "
+                                             "(" + to_string(graphId) + ", " + to_string(graphOpId) + ", " +
+                                             to_string(opTime) + ")");
+}
+
+int SQLiteDBInterface::getGraphOperationTime(int graphId, int graphOpId) {
+    vector<vector<pair<basic_string<char>, basic_string<char>>>> result =
+            ((DBInterface *) this)->runSelect(
+                    "SELECT time FROM graph_operation_time WHERE idgraph=" + to_string(graphId) +
+                    " AND idoperation=" + to_string(graphOpId));
+    return stoi(result[0][0].second);
+}
