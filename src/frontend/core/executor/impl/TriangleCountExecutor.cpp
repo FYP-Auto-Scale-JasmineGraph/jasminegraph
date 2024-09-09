@@ -206,26 +206,28 @@ static std::vector<int> reallocate_parts(std::map<int, string> &alloc, std::set<
     return copying;
 }
 
-static void scale_up(std::map<string, int> &loads, map<string, string> &workers, int copy_cnt) {
+static int scale_up(std::map<string, int> &loads, map<string, string> &workers, int copy_cnt) {
     int curr_load = 0;
     for (auto it = loads.begin(); it != loads.end(); it++) {
         curr_load += it->second;
     }
     int n_cores = copy_cnt + curr_load - 3 * loads.size();
     if (n_cores < 0) {
-        return;
+        return EXIT_FAILURE;
     }
     int n_workers = n_cores / 2 + 1;  // allocate a little more to prevent saturation
     if (n_cores % 2 > 0) n_workers++;
-    if (n_workers == 0) return;
+    if (n_workers == 0) return EXIT_FAILURE;
 
     K8sWorkerController *k8sController = K8sWorkerController::getInstance();
     map<string, string> w_new = k8sController->scaleUp(n_workers);
+    if (w_new.size() < n_workers) return EXIT_FAILURE;
 
     for (auto it = w_new.begin(); it != w_new.end(); it++) {
         loads[it->first] = 0.1;
         workers[it->first] = it->second;
     }
+    return EXIT_SUCCESS;
 }
 
 static int alloc_net_plan(std::map<int, string> &alloc, std::vector<int> &parts,
@@ -309,8 +311,8 @@ static int alloc_net_plan(std::map<int, string> &alloc, std::vector<int> &parts,
     return best;
 }
 
-static void filter_partitions(std::map<string, std::vector<string>> &partitionMap, SQLiteDBInterface *sqlite,
-                              string graphId) {
+static int filter_partitions(std::map<string, std::vector<string>> &partitionMap, SQLiteDBInterface *sqlite,
+                             string graphId) {
     map<string, string> workers;  // id => "ip:port"
     const std::vector<vector<pair<string, string>>> &results =
         sqlite->runSelect("SELECT DISTINCT idworker,ip,server_port FROM worker;");
@@ -369,7 +371,9 @@ static void filter_partitions(std::map<string, std::vector<string>> &partitionMa
     if (unallocated > 0) {
         triangleCount_logger.info(to_string(unallocated) + " partitions remaining after alloc_plan");
         auto copying = reallocate_parts(alloc, remain, P_AVAIL);
-        scale_up(loads, workers, copying.size());
+        if (scale_up(loads, workers, copying.size()) != EXIT_SUCCESS) {
+            return EXIT_FAILURE;
+        }
         triangleCount_logger.info("Scale up completed");
 
         map<string, int> net_loads;
@@ -432,13 +436,15 @@ static void filter_partitions(std::map<string, std::vector<string>> &partitionMa
         auto worker = it->second;
         partitionMap[worker].push_back(to_string(partition));
     }
+    return EXIT_SUCCESS;
 }
 
+static int need_wait = 1;
 void TriangleCountExecutor::execute() {
     schedulerMutex.lock();
     time_t curr_time = time(NULL);
     // 8 seconds = upper bound to the time to send performance metrics after allocating trian task to a worker
-    if (curr_time < last_exec_time + 8) {
+    if (need_wait && curr_time < last_exec_time + 8) {
         sleep(last_exec_time + 9 - curr_time);  // 9 = 8+1 to ensure it waits more than 8 seconds
     }
     int uniqueId = getUid();
@@ -526,7 +532,11 @@ void TriangleCountExecutor::execute() {
     if (jasminegraph_profile == PROFILE_K8S) {
         std::unique_ptr<K8sInterface> k8sInterface(new K8sInterface());
         if (k8sInterface->getJasmineGraphConfig("auto_scaling_enabled") == "true") {
-            filter_partitions(partitionMap, sqlite, graphId);
+            if (filter_partitions(partitionMap, sqlite, graphId) != EXIT_SUCCESS) {
+                need_wait = 0;
+                // TODO(thevindu-w): enqueue with request.getJobId()
+                return;
+            }
         }
     }
 

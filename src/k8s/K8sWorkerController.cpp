@@ -305,7 +305,7 @@ void K8sWorkerController::setNumberOfWorkers(int newNumberOfWorkers) {
 
 std::map<string, string> K8sWorkerController::scaleUp(int count) {
     if (this->numberOfWorkers + count > this->maxWorkers) {
-        count = this->maxWorkers - this->numberOfWorkers;
+        return {};
     }
     std::map<string, string> workers;
     if (count <= 0) return workers;
