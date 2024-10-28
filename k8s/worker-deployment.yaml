@@ -52,7 +52,6 @@ spec:
           resources:
             requests:
               cpu: "2500m"
-              memory: "12Gi"
           volumeMounts:
             - mountPath: "/var/tmp/"
               name: "jasminegraph-worker<worker-id>-data"
