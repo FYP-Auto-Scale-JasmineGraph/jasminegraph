@@ -66,3 +66,14 @@ TEST_F(SQLiteDBInterfaceTest, TestRunInsertAndUpdate) {
     ASSERT_EQ(data[0][2].second, "127.0.0.1");
     ASSERT_EQ(data[0][3].second, "false");
 }
+
+TEST_F(SQLiteDBInterfaceTest, TestUpsertGraphOperationTimeAndGetGraphOperationTime) {
+    auto result = dbInterface->upsertGraphOperationTime(1, 1, 123);
+    ASSERT_EQ(result, 1);
+    auto time = dbInterface->getGraphOperationTime(1, 1);
+    ASSERT_EQ(time, 123);
+    result = dbInterface->upsertGraphOperationTime(1, 1, 456);
+    ASSERT_EQ(result, 1);
+    time = dbInterface->getGraphOperationTime(1, 1);
+    ASSERT_EQ(time, 456);
+}

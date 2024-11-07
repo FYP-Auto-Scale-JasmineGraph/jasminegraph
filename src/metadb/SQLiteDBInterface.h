@@ -28,6 +28,10 @@ class SQLiteDBInterface : public DBInterface {
     int init() override;
 
     SQLiteDBInterface();
+
+    int upsertGraphOperationTime(int graphId, int graphOpId, int opTime);
+
+    int getGraphOperationTime(int graphId, int graphOpId);
 };
 
 #endif  // JASMINEGRAPH_SQLITEDBINTERFACE_H

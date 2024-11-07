@@ -16,6 +16,8 @@ limitations under the License.
 #include <time.h>
 #include <unistd.h>
 
+#include <unordered_map>
+
 #include "../../../../../globals.h"
 #include "../../../../k8s/K8sWorkerController.h"
 #include "../../../../scale/scaler.h"
@@ -31,6 +33,13 @@ static std::mutex fileCombinationMutex;
 static std::mutex aggregateWeightMutex;
 
 static time_t last_exec_time = 0;
+
+typedef struct _end_time_t {
+    time_t endTime;
+    int partitionCnt;
+} end_time_t;
+
+static unordered_map<int, end_time_t> endTimes;
 
 static string isFileAccessibleToWorker(std::string graphId, std::string partitionId, std::string aggregatorHostName,
                                        std::string aggregatorPort, std::string masterIP, std::string fileType,
@@ -197,26 +206,28 @@ static std::vector<int> reallocate_parts(std::map<int, string> &alloc, std::set<
     return copying;
 }
 
-static void scale_up(std::map<string, int> &loads, map<string, string> &workers, int copy_cnt) {
+static int scale_up(std::map<string, int> &loads, map<string, string> &workers, int copy_cnt) {
     int curr_load = 0;
     for (auto it = loads.begin(); it != loads.end(); it++) {
         curr_load += it->second;
     }
     int n_cores = copy_cnt + curr_load - 3 * loads.size();
     if (n_cores < 0) {
-        return;
+        return EXIT_FAILURE;
     }
     int n_workers = n_cores / 2 + 1;  // allocate a little more to prevent saturation
     if (n_cores % 2 > 0) n_workers++;
-    if (n_workers == 0) return;
+    if (n_workers == 0) return EXIT_FAILURE;
 
     K8sWorkerController *k8sController = K8sWorkerController::getInstance();
     map<string, string> w_new = k8sController->scaleUp(n_workers);
+    if (w_new.size() < n_workers) return EXIT_FAILURE;
 
     for (auto it = w_new.begin(); it != w_new.end(); it++) {
         loads[it->first] = 0.1;
         workers[it->first] = it->second;
     }
+    return EXIT_SUCCESS;
 }
 
 static int alloc_net_plan(std::map<int, string> &alloc, std::vector<int> &parts,
@@ -300,8 +311,8 @@ static int alloc_net_plan(std::map<int, string> &alloc, std::vector<int> &parts,
     return best;
 }
 
-static void filter_partitions(std::map<string, std::vector<string>> &partitionMap, SQLiteDBInterface *sqlite,
-                              string graphId) {
+static int filter_partitions(std::map<string, std::vector<string>> &partitionMap, SQLiteDBInterface *sqlite,
+                             string graphId) {
     map<string, string> workers;  // id => "ip:port"
     const std::vector<vector<pair<string, string>>> &results =
         sqlite->runSelect("SELECT DISTINCT idworker,ip,server_port FROM worker;");
@@ -360,7 +371,9 @@ static void filter_partitions(std::map<string, std::vector<string>> &partitionMa
     if (unallocated > 0) {
         triangleCount_logger.info(to_string(unallocated) + " partitions remaining after alloc_plan");
         auto copying = reallocate_parts(alloc, remain, P_AVAIL);
-        scale_up(loads, workers, copying.size());
+        if (scale_up(loads, workers, copying.size()) != EXIT_SUCCESS) {
+            return EXIT_FAILURE;
+        }
         triangleCount_logger.info("Scale up completed");
 
         map<string, int> net_loads;
@@ -423,13 +436,15 @@ static void filter_partitions(std::map<string, std::vector<string>> &partitionMa
         auto worker = it->second;
         partitionMap[worker].push_back(to_string(partition));
     }
+    return EXIT_SUCCESS;
 }
 
+static int need_wait = 1;
 void TriangleCountExecutor::execute() {
     schedulerMutex.lock();
     time_t curr_time = time(NULL);
     // 8 seconds = upper bound to the time to send performance metrics after allocating trian task to a worker
-    if (curr_time < last_exec_time + 8) {
+    if (need_wait && curr_time < last_exec_time + 8) {
         sleep(last_exec_time + 9 - curr_time);  // 9 = 8+1 to ensure it waits more than 8 seconds
     }
     int uniqueId = getUid();
@@ -517,7 +532,11 @@ void TriangleCountExecutor::execute() {
     if (jasminegraph_profile == PROFILE_K8S) {
         std::unique_ptr<K8sInterface> k8sInterface(new K8sInterface());
         if (k8sInterface->getJasmineGraphConfig("auto_scaling_enabled") == "true") {
-            filter_partitions(partitionMap, sqlite, graphId);
+            if (filter_partitions(partitionMap, sqlite, graphId) != EXIT_SUCCESS) {
+                need_wait = 0;
+                // TODO(thevindu-w): enqueue with request.getJobId()
+                return;
+            }
         }
     }
 
@@ -578,6 +597,14 @@ void TriangleCountExecutor::execute() {
         }
     }
 
+    // if (estimated_time_known)
+    {
+        // TODO (thevindu-w): replace 1200 (seconds) with estimated runtime if it's known
+        end_time_t end_time_estimate = {.endTime = time(NULL) + 1200, .partitionCnt = partitionCount};
+        endTimes[uniqueId] = end_time_estimate;
+    }
+    // TODO (thevindu-w): if queued, then add reserved CPU core count
+
     PerformanceUtil::init();
 
     std::string query =
@@ -637,6 +664,8 @@ void TriangleCountExecutor::execute() {
         }
     }
     schedulerMutex.unlock();
+
+    endTimes.erase(uniqueId);
 
     workerResponded = true;
 
@@ -726,185 +755,191 @@ long TriangleCountExecutor::getTriangleCount(
     triangleCount_logger.log("Sent : " + JasmineGraphInstanceProtocol::HANDSHAKE, "info");
     string response = Utils::read_str_trim_wrapper(sockfd, data, INSTANCE_DATA_LENGTH);
 
-    if (response.compare(JasmineGraphInstanceProtocol::HANDSHAKE_OK) == 0) {
-        triangleCount_logger.log("Received : " + JasmineGraphInstanceProtocol::HANDSHAKE_OK, "info");
-        result_wr = write(sockfd, masterIP.c_str(), masterIP.size());
-
-        if (result_wr < 0) {
-            triangleCount_logger.log("Error writing to socket", "error");
+    if (response.compare(JasmineGraphInstanceProtocol::HANDSHAKE_OK)) {
+        triangleCount_logger.error("There was an error in the upload process and the response is :: " + response);
+        auto end_time_it = endTimes.find(uniqueId);
+        if (end_time_it != endTimes.end()) {
+            end_time_it->second.partitionCnt--;
         }
-        triangleCount_logger.log("Sent : " + masterIP, "info");
-
-        response = Utils::read_str_trim_wrapper(sockfd, data, INSTANCE_DATA_LENGTH);
-        if (response.compare(JasmineGraphInstanceProtocol::HOST_OK) == 0) {
-            triangleCount_logger.log("Received : " + JasmineGraphInstanceProtocol::HOST_OK, "info");
-        } else {
-            triangleCount_logger.log("Received : " + response, "error");
-        }
-        result_wr = write(sockfd, JasmineGraphInstanceProtocol::TRIANGLES.c_str(),
-                          JasmineGraphInstanceProtocol::TRIANGLES.size());
-
-        if (result_wr < 0) {
-            triangleCount_logger.log("Error writing to socket", "error");
-        }
-        triangleCount_logger.log("Sent : " + JasmineGraphInstanceProtocol::TRIANGLES, "info");
-
-        response = Utils::read_str_trim_wrapper(sockfd, data, INSTANCE_DATA_LENGTH);
-        if (response.compare(JasmineGraphInstanceProtocol::OK) == 0) {
-            triangleCount_logger.log("Received : " + JasmineGraphInstanceProtocol::OK, "info");
-            result_wr = write(sockfd, std::to_string(graphId).c_str(), std::to_string(graphId).size());
-
-            if (result_wr < 0) {
-                triangleCount_logger.log("Error writing to socket", "error");
-            }
-            triangleCount_logger.log("Sent : Graph ID " + std::to_string(graphId), "info");
-
-            response = Utils::read_str_trim_wrapper(sockfd, data, INSTANCE_DATA_LENGTH);
-        }
-
-        if (response.compare(JasmineGraphInstanceProtocol::OK) == 0) {
-            triangleCount_logger.log("Received : " + JasmineGraphInstanceProtocol::OK, "info");
-            result_wr = write(sockfd, std::to_string(partitionId).c_str(), std::to_string(partitionId).size());
-
-            if (result_wr < 0) {
-                triangleCount_logger.log("Error writing to socket", "error");
-            }
-
-            triangleCount_logger.log("Sent : Partition ID " + std::to_string(partitionId), "info");
-
-            response = Utils::read_str_trim_wrapper(sockfd, data, INSTANCE_DATA_LENGTH);
-        }
-
-        if (response.compare(JasmineGraphInstanceProtocol::OK) == 0) {
-            triangleCount_logger.log("Received : " + JasmineGraphInstanceProtocol::OK, "info");
-            result_wr = write(sockfd, std::to_string(threadPriority).c_str(), std::to_string(threadPriority).size());
-
-            if (result_wr < 0) {
-                triangleCount_logger.log("Error writing to socket", "error");
-            }
-            triangleCount_logger.log("Sent : Thread Priority " + std::to_string(threadPriority), "info");
-
-            response = Utils::read_str_trim_wrapper(sockfd, data, INSTANCE_DATA_LENGTH);
-            triangleCount_logger.log("Got response : |" + response + "|", "info");
-            triangleCount = atol(response.c_str());
-        }
-
-        if (isCompositeAggregation) {
-            triangleCount_logger.log("###COMPOSITE### Started Composite aggregation ", "info");
-            for (int combinationIndex = 0; combinationIndex < fileCombinations.size(); ++combinationIndex) {
-                const std::vector<string> &fileList = fileCombinations.at(combinationIndex);
-                std::set<string> partitionIdSet;
-                std::set<string> partitionSet;
-                std::map<int, int> tempWeightMap;
-                std::set<string> transferRequireFiles;
-                std::string combinationKey = "";
-                std::string availableFiles = "";
-                std::string transferredFiles = "";
-                bool isAggregateValid = false;
-
-                for (auto listIterator = fileList.begin(); listIterator != fileList.end(); ++listIterator) {
-                    std::string fileName = *listIterator;
-
-                    size_t lastIndex = fileName.find_last_of(".");
-                    string rawFileName = fileName.substr(0, lastIndex);
-
-                    const std::vector<std::string> &fileNameParts = Utils::split(rawFileName, '_');
-
-                    /*Partition numbers are extracted from  the file name. The starting index of partition number
-                     * is 2. Therefore the loop starts with 2*/
-                    for (int index = 2; index < fileNameParts.size(); ++index) {
-                        partitionSet.insert(fileNameParts[index]);
-                    }
-                }
-
-                if (partitionSet.find(std::to_string(partitionId)) == partitionSet.end()) {
-                    continue;
-                }
-
-                if (!proceedOrNot(partitionSet, partitionId)) {
-                    continue;
-                }
-
-                for (auto fileListIterator = fileList.begin(); fileListIterator != fileList.end(); ++fileListIterator) {
-                    std::string fileName = *fileListIterator;
-                    bool isTransferRequired = true;
-
-                    combinationKey = fileName + ":" + combinationKey;
-
-                    size_t lastindex = fileName.find_last_of(".");
-                    string rawFileName = fileName.substr(0, lastindex);
-
-                    std::vector<std::string> fileNameParts = Utils::split(rawFileName, '_');
-
-                    for (int index = 2; index < fileNameParts.size(); ++index) {
-                        if (fileNameParts[index] == std::to_string(partitionId)) {
-                            isTransferRequired = false;
-                        }
-                        partitionIdSet.insert(fileNameParts[index]);
-                    }
-
-                    if (isTransferRequired) {
-                        transferRequireFiles.insert(fileName);
-                        transferredFiles = fileName + ":" + transferredFiles;
-                    } else {
-                        availableFiles = fileName + ":" + availableFiles;
-                    }
-                }
-
-                std::string adjustedCombinationKey = combinationKey.substr(0, combinationKey.size() - 1);
-                std::string adjustedAvailableFiles = availableFiles.substr(0, availableFiles.size() - 1);
-                std::string adjustedTransferredFile = transferredFiles.substr(0, transferredFiles.size() - 1);
-
-                fileCombinationMutex.lock();
-                std::map<std::string, std::string> &combinationWorkerMap = *combinationWorkerMap_p;
-                if (combinationWorkerMap.find(combinationKey) == combinationWorkerMap.end()) {
-                    if (partitionIdSet.find(std::to_string(partitionId)) != partitionIdSet.end()) {
-                        combinationWorkerMap[combinationKey] = std::to_string(partitionId);
-                        isAggregateValid = true;
-                    }
-                }
-                fileCombinationMutex.unlock();
-
-                if (isAggregateValid) {
-                    for (auto transferRequireFileIterator = transferRequireFiles.begin();
-                         transferRequireFileIterator != transferRequireFiles.end(); ++transferRequireFileIterator) {
-                        std::string transferFileName = *transferRequireFileIterator;
-                        std::string fileAccessible = isFileAccessibleToWorker(
-                            std::to_string(graphId), std::string(), host, std::to_string(port), masterIP,
-                            JasmineGraphInstanceProtocol::FILE_TYPE_CENTRALSTORE_COMPOSITE, transferFileName);
-
-                        if (fileAccessible.compare("false") == 0) {
-                            copyCompositeCentralStoreToAggregator(host, std::to_string(port), std::to_string(dataPort),
-                                                                  transferFileName, masterIP);
-                        }
-                    }
-
-                    triangleCount_logger.log("###COMPOSITE### Retrieved Composite triangle list ", "debug");
-
-                    const auto &triangles =
-                        countCompositeCentralStoreTriangles(host, std::to_string(port), adjustedTransferredFile,
-                                                            masterIP, adjustedAvailableFiles, threadPriority);
-                    if (triangles.size() > 0) {
-                        triangleCount +=
-                            updateTriangleTreeAndGetTriangleCount(triangles, triangleTree_p, triangleTreeMutex_p);
-                    }
-                }
-                updateMap(partitionId);
-            }
-        }
-
-        triangleCount_logger.info("###COMPOSITE### Returning Total Triangles from executer ");
         Utils::send_str_wrapper(sockfd, JasmineGraphInstanceProtocol::CLOSE);
         close(sockfd);
-        return triangleCount;
-
-    } else {
-        triangleCount_logger.log("There was an error in the upload process and the response is :: " + response,
-                                 "error");
+        return 0;
     }
+    triangleCount_logger.log("Received : " + JasmineGraphInstanceProtocol::HANDSHAKE_OK, "info");
+    result_wr = write(sockfd, masterIP.c_str(), masterIP.size());
+
+    if (result_wr < 0) {
+        triangleCount_logger.log("Error writing to socket", "error");
+    }
+    triangleCount_logger.log("Sent : " + masterIP, "info");
+
+    response = Utils::read_str_trim_wrapper(sockfd, data, INSTANCE_DATA_LENGTH);
+    if (response.compare(JasmineGraphInstanceProtocol::HOST_OK) == 0) {
+        triangleCount_logger.log("Received : " + JasmineGraphInstanceProtocol::HOST_OK, "info");
+    } else {
+        triangleCount_logger.log("Received : " + response, "error");
+    }
+    result_wr =
+        write(sockfd, JasmineGraphInstanceProtocol::TRIANGLES.c_str(), JasmineGraphInstanceProtocol::TRIANGLES.size());
+
+    if (result_wr < 0) {
+        triangleCount_logger.log("Error writing to socket", "error");
+    }
+    triangleCount_logger.log("Sent : " + JasmineGraphInstanceProtocol::TRIANGLES, "info");
+
+    response = Utils::read_str_trim_wrapper(sockfd, data, INSTANCE_DATA_LENGTH);
+    if (response.compare(JasmineGraphInstanceProtocol::OK) == 0) {
+        triangleCount_logger.log("Received : " + JasmineGraphInstanceProtocol::OK, "info");
+        result_wr = write(sockfd, std::to_string(graphId).c_str(), std::to_string(graphId).size());
+
+        if (result_wr < 0) {
+            triangleCount_logger.log("Error writing to socket", "error");
+        }
+        triangleCount_logger.log("Sent : Graph ID " + std::to_string(graphId), "info");
+
+        response = Utils::read_str_trim_wrapper(sockfd, data, INSTANCE_DATA_LENGTH);
+    }
+
+    if (response.compare(JasmineGraphInstanceProtocol::OK) == 0) {
+        triangleCount_logger.log("Received : " + JasmineGraphInstanceProtocol::OK, "info");
+        result_wr = write(sockfd, std::to_string(partitionId).c_str(), std::to_string(partitionId).size());
+
+        if (result_wr < 0) {
+            triangleCount_logger.log("Error writing to socket", "error");
+        }
+
+        triangleCount_logger.log("Sent : Partition ID " + std::to_string(partitionId), "info");
+
+        response = Utils::read_str_trim_wrapper(sockfd, data, INSTANCE_DATA_LENGTH);
+    }
+
+    if (response.compare(JasmineGraphInstanceProtocol::OK) == 0) {
+        triangleCount_logger.log("Received : " + JasmineGraphInstanceProtocol::OK, "info");
+        result_wr = write(sockfd, std::to_string(threadPriority).c_str(), std::to_string(threadPriority).size());
+
+        if (result_wr < 0) {
+            triangleCount_logger.log("Error writing to socket", "error");
+        }
+        triangleCount_logger.log("Sent : Thread Priority " + std::to_string(threadPriority), "info");
+
+        response = Utils::read_str_trim_wrapper(sockfd, data, INSTANCE_DATA_LENGTH);
+        triangleCount_logger.log("Got response : |" + response + "|", "info");
+        triangleCount = atol(response.c_str());
+    }
+
+    if (isCompositeAggregation) {
+        triangleCount_logger.log("###COMPOSITE### Started Composite aggregation ", "info");
+        for (int combinationIndex = 0; combinationIndex < fileCombinations.size(); ++combinationIndex) {
+            const std::vector<string> &fileList = fileCombinations.at(combinationIndex);
+            std::set<string> partitionIdSet;
+            std::set<string> partitionSet;
+            std::map<int, int> tempWeightMap;
+            std::set<string> transferRequireFiles;
+            std::string combinationKey = "";
+            std::string availableFiles = "";
+            std::string transferredFiles = "";
+            bool isAggregateValid = false;
+
+            for (auto listIterator = fileList.begin(); listIterator != fileList.end(); ++listIterator) {
+                std::string fileName = *listIterator;
+
+                size_t lastIndex = fileName.find_last_of(".");
+                string rawFileName = fileName.substr(0, lastIndex);
+
+                const std::vector<std::string> &fileNameParts = Utils::split(rawFileName, '_');
+
+                /*Partition numbers are extracted from  the file name. The starting index of partition number
+                 * is 2. Therefore the loop starts with 2*/
+                for (int index = 2; index < fileNameParts.size(); ++index) {
+                    partitionSet.insert(fileNameParts[index]);
+                }
+            }
+
+            if (partitionSet.find(std::to_string(partitionId)) == partitionSet.end()) {
+                continue;
+            }
+
+            if (!proceedOrNot(partitionSet, partitionId)) {
+                continue;
+            }
+
+            for (auto fileListIterator = fileList.begin(); fileListIterator != fileList.end(); ++fileListIterator) {
+                std::string fileName = *fileListIterator;
+                bool isTransferRequired = true;
+
+                combinationKey = fileName + ":" + combinationKey;
+
+                size_t lastindex = fileName.find_last_of(".");
+                string rawFileName = fileName.substr(0, lastindex);
+
+                std::vector<std::string> fileNameParts = Utils::split(rawFileName, '_');
+
+                for (int index = 2; index < fileNameParts.size(); ++index) {
+                    if (fileNameParts[index] == std::to_string(partitionId)) {
+                        isTransferRequired = false;
+                    }
+                    partitionIdSet.insert(fileNameParts[index]);
+                }
+
+                if (isTransferRequired) {
+                    transferRequireFiles.insert(fileName);
+                    transferredFiles = fileName + ":" + transferredFiles;
+                } else {
+                    availableFiles = fileName + ":" + availableFiles;
+                }
+            }
+
+            std::string adjustedCombinationKey = combinationKey.substr(0, combinationKey.size() - 1);
+            std::string adjustedAvailableFiles = availableFiles.substr(0, availableFiles.size() - 1);
+            std::string adjustedTransferredFile = transferredFiles.substr(0, transferredFiles.size() - 1);
+
+            fileCombinationMutex.lock();
+            std::map<std::string, std::string> &combinationWorkerMap = *combinationWorkerMap_p;
+            if (combinationWorkerMap.find(combinationKey) == combinationWorkerMap.end()) {
+                if (partitionIdSet.find(std::to_string(partitionId)) != partitionIdSet.end()) {
+                    combinationWorkerMap[combinationKey] = std::to_string(partitionId);
+                    isAggregateValid = true;
+                }
+            }
+            fileCombinationMutex.unlock();
+
+            if (isAggregateValid) {
+                for (auto transferRequireFileIterator = transferRequireFiles.begin();
+                     transferRequireFileIterator != transferRequireFiles.end(); ++transferRequireFileIterator) {
+                    std::string transferFileName = *transferRequireFileIterator;
+                    std::string fileAccessible = isFileAccessibleToWorker(
+                        std::to_string(graphId), std::string(), host, std::to_string(port), masterIP,
+                        JasmineGraphInstanceProtocol::FILE_TYPE_CENTRALSTORE_COMPOSITE, transferFileName);
+
+                    if (fileAccessible.compare("false") == 0) {
+                        copyCompositeCentralStoreToAggregator(host, std::to_string(port), std::to_string(dataPort),
+                                                              transferFileName, masterIP);
+                    }
+                }
+
+                triangleCount_logger.log("###COMPOSITE### Retrieved Composite triangle list ", "debug");
+
+                const auto &triangles =
+                    countCompositeCentralStoreTriangles(host, std::to_string(port), adjustedTransferredFile, masterIP,
+                                                        adjustedAvailableFiles, threadPriority);
+                if (triangles.size() > 0) {
+                    triangleCount +=
+                        updateTriangleTreeAndGetTriangleCount(triangles, triangleTree_p, triangleTreeMutex_p);
+                }
+            }
+            updateMap(partitionId);
+        }
+    }
+
+    auto end_time_it = endTimes.find(uniqueId);
+    if (end_time_it != endTimes.end()) {
+        end_time_it->second.partitionCnt--;
+    }
+
+    triangleCount_logger.info("###COMPOSITE### Returning Total Triangles from executer ");
     Utils::send_str_wrapper(sockfd, JasmineGraphInstanceProtocol::CLOSE);
     close(sockfd);
-    return 0;
+    return triangleCount;
 }
 
 bool TriangleCountExecutor::proceedOrNot(std::set<string> partitionSet, int partitionId) {
